@@ -8,6 +8,8 @@ import json
 import glob
 import time
 from datetime import datetime
+from dataclasses import fields
+import inspect
 
 # プロジェクトルートにパスを通す
 sys.path.append(os.getcwd())
@@ -16,6 +18,7 @@ from system.hashing import compute_combined_hash
 from system.submit import add_job, stop_runner, ensure_runner_running
 from system.queue_manager import QueueManager
 from system.inspector import get_available_plots
+from system.config_base import BaseConfig
 
 class ExperimentApp(tk.Tk):
     def __init__(self):
@@ -265,10 +268,40 @@ class ExperimentApp(tk.Tk):
             
         try:
             mod = importlib.import_module(mod_path)
-            schema = getattr(mod, "CONFIG_SCHEMA", {}).copy()
-            
+            schema = {}
+
+            # 1. 旧方式: CONFIG_SCHEMA があればそれを使う
+            if hasattr(mod, "CONFIG_SCHEMA"):
+                schema = getattr(mod, "CONFIG_SCHEMA", {}).copy()
+            else:
+                # 2. 新方式: Dataclass を探す (BaseConfig依存を弱めて探索)
+                target_cls = None
+                for name, obj in inspect.getmembers(mod, inspect.isclass):
+                    # そのモジュールで定義された Dataclass を探す
+                    if obj.__module__ == mod.__name__ and is_dataclass(obj):
+                        target_cls = obj
+                        break
+                
+                if target_cls:
+                    for f in fields(target_cls):
+                        schema[f.name] = {
+                            "type": f.type,
+                            "default": f.default,
+                            "desc": f.metadata.get("desc", ""),
+                            "ui_mode": f.metadata.get("ui_mode", "input"),
+                            "ignore": f.metadata.get("ignore", False),
+                        }
+
+        except Exception as e:
+            # エラーが発生した場合は原因を表示する (これが表示されない原因の可能性が高い)
+            print(f"[GUI Error] Failed to load config from {mod_path}")
+            print(f"Reason: {e}")
+            traceback.print_exc()
+            schema = {}
+
+        try:
             # user_config.json
-            json_path = os.path.join(json_dir, "user_config.json")
+            json_path = os.path.join(json_dir, "user_config.json")            
             if os.path.exists(json_path):
                 try:
                     with open(json_path, "r") as f:
