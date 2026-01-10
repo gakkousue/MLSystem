@@ -7,8 +7,9 @@ import importlib
 import json
 import glob
 import time
+import traceback
 from datetime import datetime
-from dataclasses import fields
+from dataclasses import fields, is_dataclass
 import inspect
 
 # プロジェクトルートにパスを通す
@@ -18,7 +19,7 @@ from system.hashing import compute_combined_hash
 from system.submit import add_job, stop_runner, ensure_runner_running
 from system.queue_manager import QueueManager
 from system.inspector import get_available_plots
-from system.config_base import BaseConfig
+from system.utils.config_base import BaseConfig
 
 class ExperimentApp(tk.Tk):
     def __init__(self):
@@ -79,44 +80,8 @@ class ExperimentApp(tk.Tk):
     def setup_left_panel(self):
         ttk.Label(self.frame_left, text="🚀 Experiment Settings", font=("", 14, "bold")).pack(pady=10)
         
-        # 1. Fixed Settings Area (Top)
-        fixed_frame = ttk.Frame(self.frame_left)
-        fixed_frame.pack(side=tk.TOP, fill=tk.X, padx=5)
-
-        # Common Settings
-        common_frame = ttk.LabelFrame(fixed_frame, text="Common Settings")
-        common_frame.pack(fill=tk.X, pady=5)
-        self.common_schema = self.load_schema("common", "")
-        self.create_fields(common_frame, "common", "", self.common_schema, self.common_vars)
-
-        # Selection
-        sel_frame = ttk.LabelFrame(fixed_frame, text="Target")
-        sel_frame.pack(fill=tk.X, pady=5)
-        
-        self.models = self.scan_definitions("models")
-        self.datasets = self.scan_definitions("datasets")
-        
-        # Model
-        ttk.Label(sel_frame, text="Model:").grid(row=0, column=0, padx=5, pady=5, sticky="w")
-        self.cb_model = ttk.Combobox(sel_frame, values=self.models, state="readonly")
-        self.cb_model.grid(row=0, column=1, padx=5, pady=5, sticky="ew")
-        
-        # Adapter
-        ttk.Label(sel_frame, text="Adapter:").grid(row=1, column=0, padx=5, pady=5, sticky="w")
-        self.cb_adapter = ttk.Combobox(sel_frame, state="readonly")
-        self.cb_adapter.grid(row=1, column=1, padx=5, pady=5, sticky="ew")
-        
-        # Dataset
-        ttk.Label(sel_frame, text="Dataset:").grid(row=2, column=0, padx=5, pady=5, sticky="w")
-        self.cb_dataset = ttk.Combobox(sel_frame, values=self.datasets, state="readonly")
-        self.cb_dataset.grid(row=2, column=1, padx=5, pady=5, sticky="ew")
-
-        self.cb_model.bind("<<ComboboxSelected>>", self.on_model_selected)
-        self.cb_adapter.bind("<<ComboboxSelected>>", self.on_adapter_selected)
-        self.cb_dataset.bind("<<ComboboxSelected>>", self.update_form)
-        
-        # 3. Action Area (Bottom Fixed) - Pack this BEFORE the middle scroll area
-        # 下部に固定するため side=BOTTOM を使用
+        # 1. Action Area (Bottom Fixed)
+        # 下部に固定するため、Scroll Areaより先に side=BOTTOM で配置
         action_area = ttk.Frame(self.frame_left)
         action_area.pack(side=tk.BOTTOM, fill=tk.X, padx=5, pady=10)
         
@@ -136,7 +101,7 @@ class ExperimentApp(tk.Tk):
         rb_plot = ttk.Radiobutton(task_frame, text="Plot", variable=self.task_mode, value="plot", command=self.update_action_state)
         rb_plot.pack(side=tk.LEFT, padx=10)
         
-        # Plot Selector (Visible/Enabled only for Plot)
+        # Plot Selector
         self.plot_combo = ttk.Combobox(task_frame, textvariable=self.selected_plot_class, state="disabled")
         self.plot_combo.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=5)
         
@@ -144,8 +109,8 @@ class ExperimentApp(tk.Tk):
         self.btn_submit = ttk.Button(action_area, text="➕ ADD JOB", command=self.submit_job)
         self.btn_submit.pack(fill=tk.X, pady=5)
 
-        # 2. Scrollable Params Area (Middle, Expands)
-        # スクロールバー設定用のコンテナ
+        # 2. Scrollable Settings Area (Full Height for Settings)
+        # 残りの領域全てをスクロール可能にする
         self.frame_params_container = ttk.Frame(self.frame_left)
         self.frame_params_container.pack(side=tk.TOP, fill=tk.BOTH, expand=True, padx=5, pady=5)
         
@@ -153,17 +118,53 @@ class ExperimentApp(tk.Tk):
         self.canvas = tk.Canvas(self.frame_params_container, yscrollcommand=self.scrollbar.set)
         self.scrollbar.config(command=self.canvas.yview)
         
-        # Pack順序: Scrollbarを右、Canvasを左
         self.scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
         self.canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         
         self.scroll_frame = ttk.Frame(self.canvas)
-        # window作成時に参照を保持
         self.canvas_window = self.canvas.create_window((0, 0), window=self.scroll_frame, anchor="nw")
         
-        # イベントバインド
         self.scroll_frame.bind("<Configure>", self.on_frame_configure)
         self.canvas.bind("<Configure>", self.on_canvas_configure)
+
+        # --- Scroll Frame Contents ---
+        
+        # 静的エリア (Common Settings & Target) - 再描画時に消さない
+        self.frame_static = ttk.Frame(self.scroll_frame)
+        self.frame_static.pack(fill=tk.X, expand=True)
+        
+        # 動的エリア (Model/Adapter/Dataset Params) - update_formで再構築
+        self.frame_dynamic = ttk.Frame(self.scroll_frame)
+        self.frame_dynamic.pack(fill=tk.X, expand=True)
+
+        # Common Settings (Inside Static Frame)
+        common_frame = ttk.LabelFrame(self.frame_static, text="Common Settings")
+        common_frame.pack(fill=tk.X, pady=5, padx=2)
+        self.common_schema = self.load_schema("common", "")
+        self.create_fields(common_frame, "common", "", self.common_schema, self.common_vars)
+
+        # Selection (Inside Static Frame)
+        sel_frame = ttk.LabelFrame(self.frame_static, text="Target")
+        sel_frame.pack(fill=tk.X, pady=5, padx=2)
+        
+        self.models = self.scan_definitions("models")
+        self.datasets = self.scan_definitions("datasets")
+        
+        ttk.Label(sel_frame, text="Model:").grid(row=0, column=0, padx=5, pady=5, sticky="w")
+        self.cb_model = ttk.Combobox(sel_frame, values=self.models, state="readonly")
+        self.cb_model.grid(row=0, column=1, padx=5, pady=5, sticky="ew")
+        
+        ttk.Label(sel_frame, text="Adapter:").grid(row=1, column=0, padx=5, pady=5, sticky="w")
+        self.cb_adapter = ttk.Combobox(sel_frame, state="readonly")
+        self.cb_adapter.grid(row=1, column=1, padx=5, pady=5, sticky="ew")
+        
+        ttk.Label(sel_frame, text="Dataset:").grid(row=2, column=0, padx=5, pady=5, sticky="w")
+        self.cb_dataset = ttk.Combobox(sel_frame, values=self.datasets, state="readonly")
+        self.cb_dataset.grid(row=2, column=1, padx=5, pady=5, sticky="ew")
+
+        self.cb_model.bind("<<ComboboxSelected>>", self.on_model_selected)
+        self.cb_adapter.bind("<<ComboboxSelected>>", self.on_adapter_selected)
+        self.cb_dataset.bind("<<ComboboxSelected>>", self.update_form)
 
         if self.models: 
             self.cb_model.current(0)
@@ -270,27 +271,22 @@ class ExperimentApp(tk.Tk):
             mod = importlib.import_module(mod_path)
             schema = {}
 
-            # 1. 旧方式: CONFIG_SCHEMA があればそれを使う
-            if hasattr(mod, "CONFIG_SCHEMA"):
-                schema = getattr(mod, "CONFIG_SCHEMA", {}).copy()
-            else:
-                # 2. 新方式: Dataclass を探す (BaseConfig依存を弱めて探索)
-                target_cls = None
-                for name, obj in inspect.getmembers(mod, inspect.isclass):
-                    # そのモジュールで定義された Dataclass を探す
-                    if obj.__module__ == mod.__name__ and is_dataclass(obj):
-                        target_cls = obj
-                        break
-                
-                if target_cls:
-                    for f in fields(target_cls):
-                        schema[f.name] = {
-                            "type": f.type,
-                            "default": f.default,
-                            "desc": f.metadata.get("desc", ""),
-                            "ui_mode": f.metadata.get("ui_mode", "input"),
-                            "ignore": f.metadata.get("ignore", False),
-                        }
+            target_cls = None
+            for name, obj in inspect.getmembers(mod, inspect.isclass):
+                # そのモジュールで定義された Dataclass を探す
+                if obj.__module__ == mod.__name__ and is_dataclass(obj):
+                    target_cls = obj
+                    break
+            
+            if target_cls:
+                for f in fields(target_cls):
+                    schema[f.name] = {
+                        "type": f.type,
+                        "default": f.default,
+                        "desc": f.metadata.get("desc", ""),
+                        "ui_mode": f.metadata.get("ui_mode", "input"),
+                        "ignore": f.metadata.get("ignore", False),
+                    }
 
         except Exception as e:
             # エラーが発生した場合は原因を表示する (これが表示されない原因の可能性が高い)
@@ -317,6 +313,10 @@ class ExperimentApp(tk.Tk):
     def create_fields(self, parent, kind, name, schema, var_dict, sub_kind=None, sub_name=None):
         row = 0
         for key, info in schema.items():
+            # _name は強制的に隠す (継承によるメタデータ消失対策)
+            if key == "_name":
+                info["ui_mode"] = "hidden"
+
             val_type = info["type"]
             default_val = info["default"]
             ui_mode = info.get("ui_mode", "input")
@@ -391,8 +391,8 @@ class ExperimentApp(tk.Tk):
         self.update_form()
 
     def update_form(self, event=None):
-        # フォームの再生成
-        for widget in self.scroll_frame.winfo_children():
+        # フォームの再生成 (動的部分のみクリア)
+        for widget in self.frame_dynamic.winfo_children():
             widget.destroy()
         
         self.model_vars = {}
@@ -406,14 +406,14 @@ class ExperimentApp(tk.Tk):
         if not model_name: return
 
         # Model Params
-        lf_m = ttk.LabelFrame(self.scroll_frame, text=f"Model: {model_name}")
+        lf_m = ttk.LabelFrame(self.frame_dynamic, text=f"Model: {model_name}")
         lf_m.pack(fill=tk.X, padx=5, pady=5)
         m_schema = self.load_schema("models", model_name)
         self.create_fields(lf_m, "models", model_name, m_schema, self.model_vars)
 
         # Adapter Params
         if adapter_name:
-            lf_a = ttk.LabelFrame(self.scroll_frame, text=f"Adapter: {adapter_name}")
+            lf_a = ttk.LabelFrame(self.frame_dynamic, text=f"Adapter: {adapter_name}")
             lf_a.pack(fill=tk.X, padx=5, pady=5)
             a_schema = self.load_schema("models", model_name, "adapters", adapter_name)
             self.create_fields(lf_a, "models", model_name, a_schema, self.adapter_vars, 
@@ -421,7 +421,7 @@ class ExperimentApp(tk.Tk):
 
         # Data Params
         if data_name:
-            lf_d = ttk.LabelFrame(self.scroll_frame, text=f"Dataset: {data_name}")
+            lf_d = ttk.LabelFrame(self.frame_dynamic, text=f"Dataset: {data_name}")
             lf_d.pack(fill=tk.X, padx=5, pady=5)
             d_schema = self.load_schema("datasets", data_name)
             self.create_fields(lf_d, "datasets", data_name, d_schema, self.data_vars)
