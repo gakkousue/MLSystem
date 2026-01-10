@@ -1,0 +1,7 @@
+{
+    "max_epochs": 2,
+    "batch_size": 32,
+    "seed": 42,
+    "num_workers": 2,
+    "gpus": 1
+}

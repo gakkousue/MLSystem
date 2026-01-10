@@ -1,0 +1,16 @@
+# configs/config.yaml
+defaults:
+  - _self_
+
+# デフォルトで読み込むモデルとデータセット名
+# フォルダ名（definitions/models/resnet 等）と一致させる
+model: resnet
+# Adapter名 (definitions/models/{model}/adapters/{adapter})
+adapter: mnist
+dataset: mnist
+
+# ユーザーパラメータを受け取るためのプレースホルダー
+# ここにCLIやGUIから model_params.lr=0.01 のように値が注入される
+model_params: {}
+adapter_params: {}
+data_params: {}
