@@ -114,8 +114,8 @@ class Runner:
             # ファイルはすでに running ディレクトリに移動されているため、running_path を渡す
             cmd = [sys.executable, script_path, running_path]
         else:
-            # 通常の学習 (train.py)
-            cmd = [sys.executable, "system/train.py"] + job_data["args"]
+            # 通常の学習 (execute_train.py)
+            cmd = [sys.executable, "system/execute_train.py"] + job_data["args"]
         
         start_time = time.time()
         # プロセスを保持しておく（停止時に道連れにするため）

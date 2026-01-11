@@ -430,18 +430,23 @@ class ExperimentApp(tk.Tk):
         self.update_plot_list() # モデルが変わったのでPlotリストも更新
 
     def update_plot_list(self):
-        """現在選択中のモデルで利用可能なPlotクラスをリストアップ"""
+        """現在選択中のモデル/アダプター/データセットで利用可能なPlotクラスをリストアップ"""
         model_name = self.cb_model.get()
+        adapter_name = self.cb_adapter.get()
+        dataset_name = self.cb_dataset.get()
+
         if not model_name:
             self.plot_combo['values'] = []
             return
             
         try:
-            plots = get_available_plots(model_name)
+            plots = get_available_plots(model_name, adapter_name, dataset_name)
             plot_names = [p.__name__ for p in plots]
             self.plot_combo['values'] = plot_names
             if plot_names:
                 self.plot_combo.current(0)
+            else:
+                self.selected_plot_class.set("")
         except Exception:
             self.plot_combo['values'] = []
 

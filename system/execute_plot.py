@@ -45,8 +45,11 @@ def main():
         loader = ExperimentLoader(hash_id)
         
         # 3. Plotクラスの検索
-        model_name = loader.model_name
-        available_plots = get_available_plots(model_name)
+        available_plots = get_available_plots(
+            loader.model_name, 
+            loader.adapter_name, 
+            loader.dataset_name
+        )
         
         target_cls = None
         for cls in available_plots:

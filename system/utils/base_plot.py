@@ -51,7 +51,7 @@ class BasePlot:
             cmd_args.append(f"{k}={v}")
             
         # 実行コマンド構築
-        cmd = [sys.executable, "system/train.py"] + cmd_args
+        cmd = [sys.executable, "system/execute_train.py"] + cmd_args
         
         # 実行
         try:

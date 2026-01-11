@@ -1,7 +1,8 @@
-# system/train.py
+# system/execute_train.py
 import os
 import sys
 
+# プロジェクトルートにパスを通す
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 import json
@@ -23,15 +24,6 @@ def main(cfg):
         adapter_mod = importlib.import_module(f"definitions.models.{cfg.model}.adapters.{cfg.adapter}.adapter")
         data_mod  = importlib.import_module(f"definitions.datasets.{cfg.dataset}.datamodule")
         
-        # Plot用モジュール (存在すればロード)
-        try:
-            data_plot_mod = importlib.import_module(f"definitions.datasets.{cfg.dataset}.plots")
-        except ImportError: data_plot_mod = None
-        
-        try:
-            adapter_plot_mod = importlib.import_module(f"definitions.models.{cfg.model}.adapters.{cfg.adapter}.plot")
-        except ImportError: adapter_plot_mod = None
-
         # スキーマ用モジュール (config.py)
         model_conf_mod = importlib.import_module(f"definitions.models.{cfg.model}.config")
         adapter_conf_mod = importlib.import_module(f"definitions.models.{cfg.model}.adapters.{cfg.adapter}.config")
@@ -79,30 +71,12 @@ def main(cfg):
     
     datamodule = data_mod.create_datamodule(combined_data_params, adapter_transform=input_transform)
     
+    # 5. Modelの準備
+    # Datasetのメタ情報を取得し、Adapterを通してModel用引数に変換する
+    # Setupを呼んでメタ情報を確定させる
     datamodule.prepare_data()
     datamodule.setup(stage="fit")
 
-    # --- Plot Phase 1: 生データの可視化 ---
-    if data_plot_mod and hasattr(data_plot_mod, "plot_samples"):
-        try:
-            data_plot_mod.plot_samples(datamodule, save_dir)
-        except Exception as e:
-            print(f"Warning: Plot Phase 1 failed: {e}")
-
-    # --- Plot Phase 2: Adapter変換後データの可視化 ---
-    if adapter_plot_mod and hasattr(adapter_plot_mod, "plot_transformed_sample"):
-        try:
-            # Datasetから1サンプル取得 (Augmentation + Adapter変換済み)
-            # train_dataloaderのdatasetはSubsetの可能性があるためアクセスに注意
-            dataset_inst = datamodule.train_dataloader().dataset
-            if len(dataset_inst) > 0:
-                sample_data = dataset_inst[0] # (img_tensor, label)
-                adapter_plot_mod.plot_transformed_sample(sample_data, save_dir)
-        except Exception as e:
-            print(f"Warning: Plot Phase 2 failed: {e}")
-
-    # 5. Modelの準備
-    # Datasetのメタ情報を取得し、Adapterを通してModel用引数に変換する
     data_meta = {k: getattr(datamodule, k) for k in dir(datamodule) if not k.startswith('_')}
     
     # Adapter: "このデータなら、Modelにはこういう引数(in_channels=1など)を渡してね"
