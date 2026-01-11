@@ -76,6 +76,30 @@ class QueueManager:
             q.insert(0, job_id)
             self._save_list(q)
 
+    def move_up(self, job_id):
+        """指定したジョブを一つ前に移動する"""
+        with FileLock(LOCK_DIR):
+            q = self._load_list()
+            if job_id in q:
+                idx = q.index(job_id)
+                if idx > 0:
+                    q[idx], q[idx-1] = q[idx-1], q[idx]
+                    self._save_list(q)
+                    return True
+        return False
+
+    def move_down(self, job_id):
+        """指定したジョブを一つ後ろに移動する"""
+        with FileLock(LOCK_DIR):
+            q = self._load_list()
+            if job_id in q:
+                idx = q.index(job_id)
+                if idx < len(q) - 1:
+                    q[idx], q[idx+1] = q[idx+1], q[idx]
+                    self._save_list(q)
+                    return True
+        return False
+
     def pop(self):
         """先頭のジョブIDを取得してリストから削除する（Runnerが使用）"""
         with FileLock(LOCK_DIR):

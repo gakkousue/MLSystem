@@ -1,4 +1,5 @@
 {
+    "_name": "common",
     "max_epochs": 2,
     "batch_size": 32,
     "seed": 42,

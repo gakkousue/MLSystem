@@ -1,4 +1,5 @@
 {
+    "_name": "mnist",
     "target_dataset": "mnist",
     "resize_scale": 1.0
 }
