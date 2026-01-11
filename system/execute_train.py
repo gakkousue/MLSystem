@@ -11,25 +11,32 @@ import hydra
 from omegaconf import OmegaConf
 import pytorch_lightning as pl
 from system.hashing import compute_combined_hash
+from system.registry import Registry
+from system.inspector import find_config_class # common設定用に残す
 
 @hydra.main(config_path="../configs", config_name="config", version_base=None)
 def main(cfg):
     print(f"Loaded Config: Model={cfg.model}, Adapter={cfg.adapter}, Dataset={cfg.dataset}")
 
-    # 1. モジュール読み込み
+    registry = Registry()
+
+    # 1. モジュール読み込み (Registry使用)
     try:
-        # ロジック用モジュール
-        model_mod = importlib.import_module(f"definitions.models.{cfg.model}.model")
-        # Adapterのロード (definitions.models.{model}.adapters.{adapter})
-        adapter_mod = importlib.import_module(f"definitions.models.{cfg.model}.adapters.{cfg.adapter}.adapter")
-        data_mod  = importlib.import_module(f"definitions.datasets.{cfg.dataset}.datamodule")
+        # クラス定義の取得
+        # Model
+        ModelClass = registry.get_main_class("models", cfg.model)
+        # DataModule
+        DataModuleClass = registry.get_main_class("datasets", cfg.dataset)
+        # Adapterモジュール (関数群)
+        adapter_mod = registry.get_adapter_module(cfg.model, cfg.adapter)
         
-        # スキーマ用モジュール (config.py)
-        model_conf_mod = importlib.import_module(f"definitions.models.{cfg.model}.config")
-        adapter_conf_mod = importlib.import_module(f"definitions.models.{cfg.model}.adapters.{cfg.adapter}.config")
-        data_conf_mod  = importlib.import_module(f"definitions.datasets.{cfg.dataset}.config")
-    except ImportError as e:
-        print(f"Error: Modules not found. {e}")
+        # Configクラス定義の取得
+        model_config_cls = registry.get_config_class("models", cfg.model)
+        adapter_config_cls = registry.get_config_class("models", cfg.model, cfg.adapter)
+        data_config_cls = registry.get_config_class("datasets", cfg.dataset)
+        
+    except Exception as e:
+        print(f"Error loading modules from registry: {e}")
         return
 
     # 2. ユーザー設定の展開
@@ -44,13 +51,14 @@ def main(cfg):
     
     # 共通設定スキーマ
     import common.config as common_conf_mod
-    from system.inspector import find_config_class
-
-    # Configクラスを取得
+    
+    # Common設定は従来通り
     common_cls = find_config_class(common_conf_mod)
-    model_cls = find_config_class(model_conf_mod)
-    adapter_cls = find_config_class(adapter_conf_mod)
-    data_cls = find_config_class(data_conf_mod)
+    
+    # 他はRegistryから取得済み
+    model_cls = model_config_cls
+    adapter_cls = adapter_config_cls
+    data_cls = data_config_cls
 
     # 3. ハッシュ計算 (Adapterも含む)
     hash_id, diff_payload = compute_combined_hash(
@@ -76,7 +84,16 @@ def main(cfg):
     # common設定(batch_size等)をデータ設定にマージして渡す
     combined_data_params = {**user_common_params, **user_data_params}
     
-    datamodule = data_mod.create_datamodule(combined_data_params, adapter_transform=input_transform)
+    # DataModuleのインスタンス化 (create_datamodule関数ではなくクラスを直接使用する場合の想定だが
+    # 既存コードは create_datamodule を呼んでいた。
+    # Registryはクラスを返すように実装したが、モジュール自体も必要か？
+    # -> Datamodule定義が create_datamodule 関数方式ならモジュールが必要。
+    
+    # 修正: Datamoduleはクラス(LightningDataModule継承)として実装されているはず
+    # datamodule.py を見ると create_datamodule 関数もあるが、DataModuleクラスもある。
+    # Registry.get_main_class は DataModule クラスを返してくれるので、それを使う。
+    
+    datamodule = DataModuleClass(adapter_transform=input_transform, **combined_data_params)
     
     # 5. Modelの準備
     # Datasetのメタ情報を取得し、Adapterを通してModel用引数に変換する
@@ -92,7 +109,7 @@ def main(cfg):
     # ユーザー設定とマージ (ユーザー設定が優先だが、構造的な引数はAdapter主導)
     final_model_kwargs = {**user_model_params, **model_init_args}
     
-    model = model_mod.Model(**final_model_kwargs)
+    model = ModelClass(**final_model_kwargs)
 
     # 6. 設定の保存
     with open(os.path.join(save_dir, "config_diff.json"), "w") as f:

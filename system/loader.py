@@ -6,7 +6,7 @@ import importlib
 import glob
 import re
 from omegaconf import OmegaConf
-from system.inspector import find_config_class
+from system.registry import Registry
 
 class ExperimentLoader:
     """
@@ -26,11 +26,14 @@ class ExperimentLoader:
         self.model_name = self.diff_payload["model"]
         self.adapter_name = self.diff_payload.get("adapter")
         self.dataset_name = self.diff_payload["dataset"]
+        
+        self.registry = Registry()
 
-    def _restore_params(self, config_mod, diff):
+    def _restore_params(self, config_cls, diff):
         """Configクラスのデフォルト値にDiffを適用してパラメータを復元"""
-        # モジュールからConfigクラスを探す
-        config_cls = find_config_class(config_mod)
+        # Configクラスそのものを受け取るように変更
+        if not config_cls:
+            return diff or {}
         if not config_cls:
             # 見つからない場合はdiffをそのまま返す（フォールバック）
             return diff or {}
@@ -48,25 +51,25 @@ class ExperimentLoader:
     def load_modules(self):
         """定義モジュールとパラメータをロードして返す（インスタンス化はしない）"""
         try:
-            # モジュール読み込み
-            model_mod = importlib.import_module(f"definitions.models.{self.model_name}.model")
-            adapter_mod = importlib.import_module(f"definitions.models.{self.model_name}.adapters.{self.adapter_name}.adapter")
-            data_mod = importlib.import_module(f"definitions.datasets.{self.dataset_name}.datamodule")
+            # クラス/モジュール読み込み (Registry)
+            ModelClass = self.registry.get_main_class("models", self.model_name)
+            adapter_mod = self.registry.get_adapter_module(self.model_name, self.adapter_name)
+            DataModuleClass = self.registry.get_main_class("datasets", self.dataset_name)
             
-            # Config定義モジュール読み込み
-            model_conf_mod = importlib.import_module(f"definitions.models.{self.model_name}.config")
-            adapter_conf_mod = importlib.import_module(f"definitions.models.{self.model_name}.adapters.{self.adapter_name}.config")
-            data_conf_mod = importlib.import_module(f"definitions.datasets.{self.dataset_name}.config")
+            # Configクラス読み込み
+            model_cls = self.registry.get_config_class("models", self.model_name)
+            adapter_cls = self.registry.get_config_class("models", self.model_name, self.adapter_name)
+            data_cls = self.registry.get_config_class("datasets", self.dataset_name)
             
-            # パラメータ復元 (OmegaConfを使用)
-            model_params = self._restore_params(model_conf_mod, self.diff_payload.get("model_diff", {}))
-            adapter_params = self._restore_params(adapter_conf_mod, self.diff_payload.get("adapter_diff", {}))
-            data_params = self._restore_params(data_conf_mod, self.diff_payload.get("data_diff", {}))
+            # パラメータ復元
+            model_params = self._restore_params(model_cls, self.diff_payload.get("model_diff", {}))
+            adapter_params = self._restore_params(adapter_cls, self.diff_payload.get("adapter_diff", {}))
+            data_params = self._restore_params(data_cls, self.diff_payload.get("data_diff", {}))
             
             return {
-                "model_mod": model_mod,
+                "ModelClass": ModelClass,
                 "adapter_mod": adapter_mod,
-                "data_mod": data_mod,
+                "DataModuleClass": DataModuleClass,
                 "model_params": model_params,
                 "adapter_params": adapter_params,
                 "data_params": data_params
@@ -93,7 +96,10 @@ class ExperimentLoader:
         # パラメータを結合 (data_paramsが優先)
         combined_data_params = {**common_params, **modules["data_params"]}
         
-        datamodule = modules["data_mod"].create_datamodule(combined_data_params, adapter_transform=input_transform)
+        # DataModuleクラスを使用
+        DataModuleClass = modules["DataModuleClass"]
+        datamodule = DataModuleClass(adapter_transform=input_transform, **combined_data_params)
+
         datamodule.prepare_data()
         datamodule.setup(stage=stage)
         
@@ -102,7 +108,9 @@ class ExperimentLoader:
         model_init_args = modules["adapter_mod"].get_model_init_args(data_meta, modules["adapter_params"])
         final_model_kwargs = {**modules["model_params"], **model_init_args}
         
-        model = modules["model_mod"].Model(**final_model_kwargs)
+        # Modelクラスを使用
+        ModelClass = modules["ModelClass"]
+        model = ModelClass(**final_model_kwargs)
         
         return model, datamodule
 

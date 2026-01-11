@@ -1,47 +1,73 @@
 # system/inspector.py
-import importlib
 import inspect
-import os
-import sys
 from system.utils.base_plot import BasePlot
+from system.registry import Registry
 
 def get_available_plots(model_name, adapter_name=None, dataset_name=None):
     """
-    Model, Adapter, Dataset の定義ディレクトリにある Plotクラスを収集して返す。
-    return: List of class objects
+    Registry経由でPlotクラスを収集して返す。
     """
-    targets = []
-    
-    # 1. Model Plots: definitions.models.{model}.plots
-    if model_name:
-        targets.append(f"definitions.models.{model_name}.plots")
-        
-    # 2. Adapter Plots: definitions.models.{model}.adapters.{adapter}.plot
-    if model_name and adapter_name:
-        targets.append(f"definitions.models.{model_name}.adapters.{adapter_name}.plot")
-        
-    # 3. Dataset Plots: definitions.datasets.{dataset}.plots
-    if dataset_name:
-        targets.append(f"definitions.datasets.{dataset_name}.plots")
-
+    registry = Registry()
     plot_classes = []
 
-    for module_path in targets:
+    def load_and_collect(info, key="plot_file"):
         try:
-            mod = importlib.import_module(module_path)
-        except ImportError:
-            continue
+            mod = registry.load_module_from_info(info, key)
             
-        # モジュール内の全メンバーを走査
-        for name, obj in inspect.getmembers(mod):
-            if inspect.isclass(obj):
-                # BasePlotを継承しているか確認 (BasePlot自身は除外)
-                if issubclass(obj, BasePlot) and obj is not BasePlot:
-                    # 定義されたモジュールが現在のモジュールと一致するものだけを取得
-                    if obj.__module__ == mod.__name__:
-                        plot_classes.append(obj)
-                        
+            # モジュール内のBasePlot継承クラスを収集
+            for name, obj in inspect.getmembers(mod):
+                if inspect.isclass(obj):
+                    if issubclass(obj, BasePlot) and obj is not BasePlot:
+                        if obj.__module__ == mod.__name__:
+                            plot_classes.append(obj)
+        except (ValueError, FileNotFoundError, ImportError):
+            pass # 定義がない場合などはスキップ
+
+    if model_name:
+        try:
+            info = registry.get_model_info(model_name)
+            load_and_collect(info)
+        except: pass
+    
+    if model_name and adapter_name:
+        try:
+            info = registry.get_adapter_info(model_name, adapter_name)
+            load_and_collect(info)
+        except: pass
+        
+    if dataset_name:
+        try:
+            info = registry.get_dataset_info(dataset_name)
+            load_and_collect(info)
+        except: pass
+
     return plot_classes
+
+# find_config_class は共通設定(CommonConfig)のためにまだ必要だが、
+# Registry内でも似たロジックを使うため、ここから Registry への依存は避けるか、
+# あるいは Registry 側がこの関数を使わないように実装した (find_class_in_module)。
+# 互換性のため残しておく。
+def find_config_class(module):
+    """
+    モジュール内から dataclass で定義された Config クラスを探して返す。
+    """
+    from dataclasses import is_dataclass
+    from system.utils.config_base import BaseConfig
+
+    candidates = []
+    for name, obj in inspect.getmembers(module):
+        if inspect.isclass(obj) and is_dataclass(obj):
+            if obj.__module__ == module.__name__:
+                candidates.append(obj)
+    
+    for c in candidates:
+        if issubclass(c, BaseConfig):
+            return c
+    
+    if candidates:
+        return candidates[0]
+        
+    return None
 
 def find_config_class(module):
     """

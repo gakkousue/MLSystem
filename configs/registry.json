@@ -1,0 +1,27 @@
+{
+    "project_root": "C:/Users/soush/研究室/MLSystem",
+    "models": {
+        "resnet": {
+            "base_dir": "definitions/models/resnet",
+            "config_file": "config.py",
+            "main_file": "model.py",
+            "plot_file": "plots.py",
+            "adapters": {
+                "mnist": {
+                    "base_dir": "adapters/mnist",
+                    "config_file": "config.py",
+                    "main_file": "adapter.py",
+                    "plot_file": "plot.py"
+                }
+            }
+        }
+    },
+    "datasets": {
+        "mnist": {
+            "base_dir": "definitions/datasets/mnist",
+            "config_file": "config.py",
+            "main_file": "datamodule.py",
+            "plot_file": "plots.py"
+        }
+    }
+}

@@ -8,6 +8,7 @@ from dataclasses import fields, is_dataclass
 from system.hashing import compute_combined_hash
 from system.submit import add_job
 from system.inspector import get_available_plots
+from system.registry import Registry
 
 class SettingsPanel(ttk.Frame):
     def __init__(self, parent, app):
@@ -19,6 +20,9 @@ class SettingsPanel(ttk.Frame):
         self.model_vars = {}
         self.adapter_vars = {}
         self.data_vars = {}
+        
+        self.registry = Registry() # Registry初期化
+
         self.current_hash = tk.StringVar(value="Calculating...")
         
         self.last_hash_payload = None 
@@ -93,8 +97,9 @@ class SettingsPanel(ttk.Frame):
         sel_frame = ttk.LabelFrame(self.frame_static, text="Target")
         sel_frame.pack(fill=tk.X, pady=5, padx=2)
         
-        self.models = self.scan_definitions("models")
-        self.datasets = self.scan_definitions("datasets")
+        # Registryからリストを取得
+        self.models = list(self.registry.data.get("models", {}).keys())
+        self.datasets = list(self.registry.data.get("datasets", {}).keys())
         
         ttk.Label(sel_frame, text="Model:").grid(row=0, column=0, padx=5, pady=5, sticky="w")
         self.cb_model = ttk.Combobox(sel_frame, values=self.models, state="readonly")
@@ -124,38 +129,43 @@ class SettingsPanel(ttk.Frame):
         canvas_width = event.width
         self.canvas.itemconfig(self.canvas_window, width=canvas_width)
 
-    def scan_definitions(self, kind):
-        path = os.path.join("definitions", kind)
-        if not os.path.exists(path): return []
-        return [d for d in os.listdir(path) if os.path.isdir(os.path.join(path, d)) and not d.startswith("__")]
+    # scan_definitions, scan_adapters は廃止
 
     def scan_adapters(self, model_name):
-        path = os.path.join("definitions", "models", model_name, "adapters")
-        if not os.path.exists(path): return []
-        return [d for d in os.listdir(path) if os.path.isdir(os.path.join(path, d)) and not d.startswith("__")]
+        # RegistryからAdapterリストを取得
+        try:
+            info = self.registry.get_model_info(model_name)
+            return list(info.get("adapters", {}).keys())
+        except:
+            return []
 
     def load_schema(self, kind, name, sub_kind=None, sub_name=None):
-        if kind == "common":
-            mod_path = "common.config"
-            json_dir = "common"
-        elif sub_kind:
-            mod_path = f"definitions.{kind}.{name}.{sub_kind}.{sub_name}.config"
-            json_dir = os.path.join("definitions", kind, name, sub_kind, sub_name)
-        else:
-            mod_path = f"definitions.{kind}.{name}.config"
-            json_dir = os.path.join("definitions", kind, name)
-            
+        target_cls = None
+        json_dir = ""
+
         try:
-            mod = importlib.import_module(mod_path)
+            if kind == "common":
+                mod = importlib.import_module("common.config")
+                from system.inspector import find_config_class
+                target_cls = find_config_class(mod)
+                json_dir = "common"
+            else:
+                # Registryを使用
+                if sub_name: # Adapter
+                    target_cls = self.registry.get_config_class(kind, name, sub_name)
+                    info = self.registry.get_adapter_info(name, sub_name)
+                    json_dir = info["base_dir"]
+                else: # Model / Dataset
+                    target_cls = self.registry.get_config_class(kind, name)
+                    if kind == "models":
+                        info = self.registry.get_model_info(name)
+                    else:
+                        info = self.registry.get_dataset_info(name)
+                    json_dir = info["base_dir"]
+
             schema = {}
-            target_cls = None
-            for n, obj in inspect.getmembers(mod, inspect.isclass):
-                if obj.__module__ == mod.__name__ and is_dataclass(obj):
-                    target_cls = obj
-                    break
-            
             if target_cls:
-                # 後でクラスオブジェクト自体が必要になるため、隠しフィールドとして保持しておく
+                # クラスオブジェクト自体を保存（ハッシュ計算用）
                 schema["__class_obj__"] = target_cls
 
                 for f in fields(target_cls):
@@ -166,19 +176,54 @@ class SettingsPanel(ttk.Frame):
                         "ui_mode": f.metadata.get("ui_mode", "input"),
                         "ignore": f.metadata.get("ignore", False),
                     }
-        except Exception:
+        except Exception as e:
+            print(f"Error loading schema ({kind}/{name}): {e}")
             schema = {}
 
+        # ユーザー設定(user_config.json)のロードと適用
         try:
-            json_path = os.path.join(json_dir, "user_config.json")            
-            if os.path.exists(json_path):
-                with open(json_path, "r") as f:
-                    user_vals = json.load(f)
-                for k, v in user_vals.items():
-                    if k in schema:
-                        schema[k]["default"] = v
-        except: pass
+            if json_dir:
+                if not os.path.isabs(json_dir):
+                    json_dir = os.path.join(os.getcwd(), json_dir)
+                    
+                json_path = os.path.join(json_dir, "user_config.json")            
+                if os.path.exists(json_path):
+                    with open(json_path, "r") as f:
+                        user_vals = json.load(f)
+                    for k, v in user_vals.items():
+                        if k in schema:
+                            schema[k]["default"] = v
+        except Exception as e:
+            print(f"Error loading user config: {e}")
+            pass
+            
         return schema
+            
+        #     if target_cls:
+        #         # 後でクラスオブジェクト自体が必要になるため、隠しフィールドとして保持しておく
+        #         schema["__class_obj__"] = target_cls
+
+        #         for f in fields(target_cls):
+        #             schema[f.name] = {
+        #                 "type": f.type,
+        #                 "default": f.default,
+        #                 "desc": f.metadata.get("desc", ""),
+        #                 "ui_mode": f.metadata.get("ui_mode", "input"),
+        #                 "ignore": f.metadata.get("ignore", False),
+        #             }
+        # except Exception:
+        #     schema = {}
+
+        # try:
+        #     json_path = os.path.join(json_dir, "user_config.json")            
+        #     if os.path.exists(json_path):
+        #         with open(json_path, "r") as f:
+        #             user_vals = json.load(f)
+        #         for k, v in user_vals.items():
+        #             if k in schema:
+        #                 schema[k]["default"] = v
+        # except: pass
+        # return schema
 
     def create_fields(self, parent, kind, name, schema, var_dict, sub_kind=None, sub_name=None):
         row = 0
