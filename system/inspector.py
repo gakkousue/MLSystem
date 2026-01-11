@@ -42,3 +42,29 @@ def get_available_plots(model_name, adapter_name=None, dataset_name=None):
                         plot_classes.append(obj)
                         
     return plot_classes
+
+def find_config_class(module):
+    """
+    モジュール内から dataclass で定義された Config クラスを探して返す。
+    system.utils.config_base.BaseConfig を継承しているものを優先するが、
+    なければ単なる dataclass を探す。
+    """
+    from dataclasses import is_dataclass
+    from system.utils.config_base import BaseConfig
+
+    candidates = []
+    for name, obj in inspect.getmembers(module):
+        if inspect.isclass(obj) and is_dataclass(obj):
+            if obj.__module__ == module.__name__:
+                candidates.append(obj)
+    
+    # BaseConfig継承クラスを優先
+    for c in candidates:
+        if issubclass(c, BaseConfig):
+            return c
+    
+    # 見つからなければ最初のdataclassを返す
+    if candidates:
+        return candidates[0]
+        
+    return None

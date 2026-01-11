@@ -5,7 +5,7 @@ import torch
 import pytorch_lightning as pl
 from torch.utils.data import DataLoader, Dataset, random_split
 from torchvision import datasets, transforms
-from .config import CONFIG_SCHEMA  # 設定を別ファイルから読み込み
+# CONFIG_SCHEMA のインポートを削除
 
 # Adapterの変換を適用するための独自Datasetクラス
 class BaseDataset(Dataset):
@@ -38,15 +38,13 @@ class DataModule(pl.LightningDataModule):
     # 初期化時にAdapterからの変換関数(adapter_transform)を受け取る
     def __init__(self, adapter_transform=None, **kwargs):
         super().__init__()
-        # スキーマに基づいて設定を展開
-        self.conf = {}
-        for key, info in CONFIG_SCHEMA.items():
-            self.conf[key] = kwargs.get(key, info["default"])
         
-        # 共通設定(batch_size, seed, num_workersなど)もkwargsに含まれているためマージする
-        self.conf.update(kwargs)
-            
+        # kwargsをそのまま設定として使用する
+        self.conf = kwargs
         self.adapter_transform = adapter_transform
+            
+        # メタ情報
+        self.num_classes = 10
             
         # メタ情報
         self.num_classes = 10

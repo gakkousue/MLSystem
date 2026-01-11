@@ -44,13 +44,20 @@ def main(cfg):
     
     # 共通設定スキーマ
     import common.config as common_conf_mod
+    from system.inspector import find_config_class
+
+    # Configクラスを取得
+    common_cls = find_config_class(common_conf_mod)
+    model_cls = find_config_class(model_conf_mod)
+    adapter_cls = find_config_class(adapter_conf_mod)
+    data_cls = find_config_class(data_conf_mod)
 
     # 3. ハッシュ計算 (Adapterも含む)
     hash_id, diff_payload = compute_combined_hash(
-        common_conf_mod.CONFIG_SCHEMA,   user_common_params,
-        model_conf_mod.CONFIG_SCHEMA,    user_model_params,
-        adapter_conf_mod.CONFIG_SCHEMA,  user_adapter_params,
-        data_conf_mod.CONFIG_SCHEMA,     user_data_params
+        common_cls,   user_common_params,
+        model_cls,    user_model_params,
+        adapter_cls,  user_adapter_params,
+        data_cls,     user_data_params
     )
 
     save_dir = os.path.join("output", "experiments", hash_id)

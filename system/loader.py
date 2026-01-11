@@ -5,6 +5,8 @@ import torch
 import importlib
 import glob
 import re
+from omegaconf import OmegaConf
+from system.inspector import find_config_class
 
 class ExperimentLoader:
     """
@@ -25,13 +27,23 @@ class ExperimentLoader:
         self.adapter_name = self.diff_payload.get("adapter")
         self.dataset_name = self.diff_payload["dataset"]
 
-    def _restore_params(self, schema, diff):
-        """スキーマのデフォルト値にDiffを適用してパラメータを復元"""
-        params = {k: v["default"] for k, v in schema.items()}
-        # ui_mode="hidden"などでdefaultが含まれない場合などのケアが必要ならここで行う
+    def _restore_params(self, config_mod, diff):
+        """Configクラスのデフォルト値にDiffを適用してパラメータを復元"""
+        # モジュールからConfigクラスを探す
+        config_cls = find_config_class(config_mod)
+        if not config_cls:
+            # 見つからない場合はdiffをそのまま返す（フォールバック）
+            return diff or {}
+            
+        # デフォルト設定を作成 (OmegaConf)
+        conf = OmegaConf.structured(config_cls)
+        
+        # 差分をマージ
         if diff:
-            params.update(diff)
-        return params
+            conf = OmegaConf.merge(conf, diff)
+            
+        # 辞書に戻して返す
+        return OmegaConf.to_container(conf, resolve=True)
 
     def load_modules(self):
         """定義モジュールとパラメータをロードして返す（インスタンス化はしない）"""
@@ -41,15 +53,15 @@ class ExperimentLoader:
             adapter_mod = importlib.import_module(f"definitions.models.{self.model_name}.adapters.{self.adapter_name}.adapter")
             data_mod = importlib.import_module(f"definitions.datasets.{self.dataset_name}.datamodule")
             
-            # スキーマ読み込み
+            # Config定義モジュール読み込み
             model_conf_mod = importlib.import_module(f"definitions.models.{self.model_name}.config")
             adapter_conf_mod = importlib.import_module(f"definitions.models.{self.model_name}.adapters.{self.adapter_name}.config")
             data_conf_mod = importlib.import_module(f"definitions.datasets.{self.dataset_name}.config")
             
-            # パラメータ復元
-            model_params = self._restore_params(model_conf_mod.CONFIG_SCHEMA, self.diff_payload.get("model_diff", {}))
-            adapter_params = self._restore_params(adapter_conf_mod.CONFIG_SCHEMA, self.diff_payload.get("adapter_diff", {}))
-            data_params = self._restore_params(data_conf_mod.CONFIG_SCHEMA, self.diff_payload.get("data_diff", {}))
+            # パラメータ復元 (OmegaConfを使用)
+            model_params = self._restore_params(model_conf_mod, self.diff_payload.get("model_diff", {}))
+            adapter_params = self._restore_params(adapter_conf_mod, self.diff_payload.get("adapter_diff", {}))
+            data_params = self._restore_params(data_conf_mod, self.diff_payload.get("data_diff", {}))
             
             return {
                 "model_mod": model_mod,
@@ -76,7 +88,7 @@ class ExperimentLoader:
         # data_paramsだけでなく、common_params (batch_size等) も渡す必要がある
         # diff_payloadから共通設定も復元する
         import common.config as common_conf_mod
-        common_params = self._restore_params(common_conf_mod.CONFIG_SCHEMA, self.diff_payload.get("common_diff", {}))
+        common_params = self._restore_params(common_conf_mod, self.diff_payload.get("common_diff", {}))
         
         # パラメータを結合 (data_paramsが優先)
         combined_data_params = {**common_params, **modules["data_params"]}

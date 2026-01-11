@@ -155,6 +155,9 @@ class SettingsPanel(ttk.Frame):
                     break
             
             if target_cls:
+                # 後でクラスオブジェクト自体が必要になるため、隠しフィールドとして保持しておく
+                schema["__class_obj__"] = target_cls
+
                 for f in fields(target_cls):
                     schema[f.name] = {
                         "type": f.type,
@@ -180,6 +183,10 @@ class SettingsPanel(ttk.Frame):
     def create_fields(self, parent, kind, name, schema, var_dict, sub_kind=None, sub_name=None):
         row = 0
         for key, info in schema.items():
+            # 内部保持用のクラスオブジェクトはスキップ
+            if key == "__class_obj__":
+                continue
+
             if key == "_name": info["ui_mode"] = "hidden"
             val_type = info["type"]
             default_val = info["default"]
@@ -348,12 +355,19 @@ class SettingsPanel(ttk.Frame):
             a_p["_name"] = a_n
             d_p["_name"] = d_n
             
+            # スキーマ辞書からクラスオブジェクトを取り出す
+            # load_schemaで "__class_obj__" に埋め込んでいる
             c_s = self.common_schema
             m_s = self.load_schema("models", m_n)
             a_s = self.load_schema("models", m_n, "adapters", a_n)
             d_s = self.load_schema("datasets", d_n)
             
-            hid, payload = compute_combined_hash(c_s, c_p, m_s, m_p, a_s, a_p, d_s, d_p)
+            c_cls = c_s.get("__class_obj__")
+            m_cls = m_s.get("__class_obj__")
+            a_cls = a_s.get("__class_obj__")
+            d_cls = d_s.get("__class_obj__")
+
+            hid, payload = compute_combined_hash(c_cls, c_p, m_cls, m_p, a_cls, a_p, d_cls, d_p)
             self.current_hash.set(hid)
             self.last_hash_payload = payload
         except:

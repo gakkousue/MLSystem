@@ -18,6 +18,7 @@ def setup_dirs(root):
         "running": os.path.join(root, "running"),
         "finished": os.path.join(root, "finished"),
         "failed": os.path.join(root, "failed"),
+        "logs": os.path.join(root, "logs"),  # ログ用ディレクトリを追加
     }
     for d in dirs.values():
         os.makedirs(d, exist_ok=True)
@@ -118,11 +119,20 @@ class Runner:
             cmd = [sys.executable, "system/execute_train.py"] + job_data["args"]
         
         start_time = time.time()
-        # プロセスを保持しておく（停止時に道連れにするため）
-        self.current_process = subprocess.Popen(cmd)
         
-        # 終了待ち
-        return_code = self.current_process.wait()
+        # ログファイルのパス設定
+        log_filename = f"job_{job_id}.log"
+        log_path = os.path.join(self.dirs["logs"], log_filename)
+
+        # ログファイルを開いて、標準出力・標準エラー出力を書き込む
+        with open(log_path, "w", encoding="utf-8") as log_file:
+            # プロセスを保持しておく（停止時に道連れにするため）
+            # stdout, stderrをログファイルにリダイレクト
+            self.current_process = subprocess.Popen(cmd, stdout=log_file, stderr=subprocess.STDOUT)
+            
+            # 終了待ち
+            return_code = self.current_process.wait()
+        
         duration = time.time() - start_time
         self.current_process = None # 終わったらクリア
 
@@ -130,9 +140,12 @@ class Runner:
         if return_code == 0:
             dest = os.path.join(self.dirs["finished"], filename)
             status = "finished"
+            error_msg = None
         else:
             dest = os.path.join(self.dirs["failed"], filename)
             status = "failed"
+            # 失敗時はログの最後の方を読み取ってエラーメッセージとして取得する
+            error_msg = self._tail_log(log_path)
 
         shutil.move(running_path, dest)
         
@@ -142,6 +155,10 @@ class Runner:
             data["status"] = status
             data["duration"] = duration
             data["finished_at"] = time.time()
+            data["log_file"] = log_path
+            if error_msg:
+                data["error_message"] = error_msg
+            
             f.seek(0)
             json.dump(data, f, indent=4)
             f.truncate()
@@ -149,6 +166,17 @@ class Runner:
         # 掃除: finishedフォルダが溜まりすぎないように古いものを削除 (最新20件保持)
         if status == "finished":
             self.cleanup_old_jobs(self.dirs["finished"], keep_limit=20)
+            # 成功した場合、古いログファイルも掃除しても良いが、今回は残す方針とする
+            
+    def _tail_log(self, path, lines=20):
+        """ログファイルの末尾を取得するヘルパー"""
+        try:
+            with open(path, "r", encoding="utf-8", errors="ignore") as f:
+                # 簡易的な実装: ファイルサイズが小さければ全部読む
+                content = f.readlines()
+                return "".join(content[-lines:])
+        except Exception:
+            return "Could not read log file."
 
     def cleanup_old_jobs(self, target_dir, keep_limit=20):
         """指定フォルダ内のJSONファイルが多すぎる場合、古い順に削除する"""

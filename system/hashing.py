@@ -3,13 +3,15 @@ import hashlib
 import json
 import copy
 
-def compute_combined_hash(common_schema, common_params, 
-                          model_schema, model_params, 
-                          adapter_schema, adapter_params,
-                          data_schema, data_params):
+from dataclasses import fields
+
+def compute_combined_hash(common_cls, common_params, 
+                          model_cls, model_params, 
+                          adapter_cls, adapter_params,
+                          data_cls, data_params):
     """
-    パラメータからハッシュIDを生成する。
-    スキーマで "ignore": True とされている項目は、値が何であれハッシュ計算から除外する。
+    Configクラス定義とパラメータからハッシュIDを生成する。
+    dataclassのmetadataにある "ignore": True の項目は除外する。
     """
     payload = {
         "model": model_params.get("_name"),
@@ -21,24 +23,33 @@ def compute_combined_hash(common_schema, common_params,
         "data_diff": {}
     }
 
-    def process_params(schema, params, target_dict):
-        for k, info in schema.items():
-            # ignoreフラグがTrueなら、値がどうあれハッシュ計算には含めない
-            if info.get("ignore", False):
+    def process_params(config_cls, params, target_dict):
+        # config_cls が None の場合はスキップ
+        if config_cls is None:
+            return
+
+        for f in fields(config_cls):
+            # ignoreフラグがTrueなら除外
+            if f.metadata.get("ignore", False):
                 continue
             
-            default = info["default"]
-            val = params.get(k, default)
+            # 内部管理用フィールド(_nameなど)も除外したければここで判定
+            # ただし _name は ignore=True になっていなくても値が変わらないはずなので問題ない
+            
+            default = f.default
+            val = params.get(f.name, default)
             
             # デフォルト値と異なる場合のみ記録
+            # 型が違う場合(int vs float)の比較には注意が必要だが、
+            # 基本的にGUI/CLIからの入力値とデフォルト値の比較を行う
             if val != default:
-                target_dict[k] = val
+                target_dict[f.name] = val
 
     # 各カテゴリの差分抽出
-    process_params(common_schema, common_params, payload["common_diff"])
-    process_params(model_schema, model_params, payload["model_diff"])
-    process_params(adapter_schema, adapter_params, payload["adapter_diff"]) # 追加
-    process_params(data_schema, data_params, payload["data_diff"])
+    process_params(common_cls, common_params, payload["common_diff"])
+    process_params(model_cls, model_params, payload["model_diff"])
+    process_params(adapter_cls, adapter_params, payload["adapter_diff"])
+    process_params(data_cls, data_params, payload["data_diff"])
 
     # JSON化してハッシュ計算
     encoded = json.dumps(payload, sort_keys=True).encode('utf-8')

@@ -3,7 +3,7 @@ import pytorch_lightning as pl
 import torch
 import torch.nn as nn
 from torchvision.models import resnet18
-from .config import CONFIG_SCHEMA
+# CONFIG_SCHEMA のインポートを削除
 import os
 import json
 
@@ -12,10 +12,9 @@ class Model(pl.LightningModule):
     def __init__(self, in_channels=3, num_classes=1000, **kwargs):
         super().__init__()
         
-        # Config設定の読み込み
-        self.conf = {}
-        for key, info in CONFIG_SCHEMA.items():
-            self.conf[key] = kwargs.get(key, info["default"])
+        # Hydra/Loaderから渡された kwargs をそのまま設定として扱う
+        # デフォルト値の補完はConfigオブジェクト(Hydra)側で行われている前提
+        self.conf = kwargs
         
         # ハイパーパラメータとして保存
         self.save_hyperparameters({
