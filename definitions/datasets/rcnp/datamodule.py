@@ -12,7 +12,8 @@ import pytorch_lightning as pl
 from torch.utils.data import Dataset, DataLoader
 
 class RCNPDataset(Dataset):
-    def __init__(self, data_dict, indices):
+    # transform引数を追加して保存する
+    def __init__(self, data_dict, indices, transform=None):
         """
         data_dict: キャッシュからロードされた全データの辞書
           - 'axis': (N, 3) numpy array
@@ -25,18 +26,32 @@ class RCNPDataset(Dataset):
         self.part = torch.from_numpy(data_dict['part'][indices])
         self.num  = torch.from_numpy(data_dict['num'][indices]).float()
         self.label = torch.from_numpy(data_dict['label'][indices]).long()
+        self.transform = transform
 
     def __len__(self):
         return len(self.label)
     
     def __getitem__(self, i):
-        return self.axis[i], self.part[i], self.num[i], self.label[i]
+        # データを取得
+        a = self.axis[i]
+        p = self.part[i]
+        n = self.num[i]
+        l = self.label[i]
+        
+        # Adapterで定義された正規化処理があれば適用する
+        # transformは (axis, part) を受け取って変換後の (axis, part) を返す関数を想定
+        if self.transform:
+            a, p = self.transform(a, p)
+            
+        return a, p, n, l
 
 
 class DataModule(pl.LightningDataModule):
     def __init__(self, adapter_transform=None, **kwargs):
         super().__init__()
         self.conf = kwargs
+        # 受け取ったtransform関数をメンバ変数として保存する
+        self.adapter_transform = adapter_transform
         
         self.data_dir = self.conf["data_dir"]
         self.cache_dir = os.path.join(self.data_dir, "cache")
@@ -265,9 +280,10 @@ class DataModule(pl.LightningDataModule):
         ind_val = indices[s1:s2]
         ind_test = indices[s2:]
         
-        self.train_ds = RCNPDataset(data_dict, ind_train)
-        self.val_ds = RCNPDataset(data_dict, ind_val)
-        self.test_ds = RCNPDataset(data_dict, ind_test)
+        # transform (self.adapter_transform) を渡すように修正
+        self.train_ds = RCNPDataset(data_dict, ind_train, transform=self.adapter_transform)
+        self.val_ds = RCNPDataset(data_dict, ind_val, transform=self.adapter_transform)
+        self.test_ds = RCNPDataset(data_dict, ind_test, transform=self.adapter_transform)
         
         print(f"Dataset Split: Train={len(self.train_ds)}, Val={len(self.val_ds)}, Test={len(self.test_ds)}")
 

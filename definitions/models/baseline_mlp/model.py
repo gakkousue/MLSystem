@@ -19,24 +19,55 @@ class BaselineModel(nn.Module):
         self.lc5 = nn.Linear(n_units, n_out)
             
     def forward(self, a, p, n):
+        # 異常値を検知してエラーを上げるヘルパー関数
+        def check(tensor, location):
+            if torch.isnan(tensor).any():
+                raise RuntimeError(f"⚠️ NaN detected at: {location}")
+            if torch.isinf(tensor).any():
+                raise RuntimeError(f"⚠️ Inf detected at: {location}")
+
         n_bat, n_par, n_dim = p.shape 
-        nonl = torch.tanh
+        nonl = torch.relu # 以前はtanhでしたがreluになっていますね（そのままでOKです）
         
+        # 入力値のチェック
+        check(p, "input p")
+        check(a, "input a")
+
         h = p.view(-1, n_dim)
         h = nonl(self.lp1(h))
         h = nonl(self.lp2(h))
         h = h.view(n_bat, n_par, -1)
         
+        check(h, "after lp layers")
+        
         # Sum pooling normalized by particle number 'n'
         # n is (batch_size,), reshape to (batch_size, 1) for broadcasting
-        h = torch.sum(h, dim=1) / n.view(-1, 1)
+        
+        # # ここで粒子数が0のものがないかチェックし、あれば警告を出す
+        # if (n == 0).any():
+        #     print(f"[Warning] n=0 detected in batch! Indices: {torch.where(n==0)[0]}")
+
+        # ゼロ除算防止のために微小値を足して割る
+        numerator = torch.sum(h, dim=1)
+        denominator = n.view(-1, 1) + 1e-6 
+        
+        h = numerator / denominator
+        
+        # 割り算直後のチェック（ここが一番危険）
+        check(h, "after pooling (division)")
 
         h = torch.cat((h, a), dim=1)
         h = nonl(self.lc1(h))
+        check(h, "after lc1")
+        
         h = nonl(self.lc2(h))
         h = nonl(self.lc3(h))
         h = nonl(self.lc4(h))
-        return self.lc5(h)
+        
+        out = self.lc5(h)
+        check(out, "final output")
+        
+        return out
 
 class Model(pl.LightningModule):
     def __init__(self, n_units=100, num_classes=3, lr=0.01, step_size=200, **kwargs):
@@ -60,12 +91,20 @@ class Model(pl.LightningModule):
         outputs = self(a, p, n)
         loss = F.cross_entropy(outputs, t)
         
-        # Log training loss
-        self.log("train_loss", loss)
-        
         # Calculate accuracy for logging
         preds = torch.argmax(outputs, dim=1)
         acc = (preds == t).float().mean()
+
+        # [DEBUG] 学習状況の詳細出力
+        # 現在のエポック、バッチ番号、ロス、精度、バッチサイズを表示
+        # print(f"[Train] Epoch={self.current_epoch} Batch={batch_idx} Size={len(t)} | Loss={loss.item():.4f} Acc={acc.item():.4f}")
+
+        # 手動NaNチェック: Lossが数値でない場合は即座に例外を投げる
+        if torch.isnan(loss) or torch.isinf(loss):
+            raise ValueError(f"エラー: Epoch={self.current_epoch}, Batch={batch_idx} でLossがNaNになりました。入力データが正規化されていない可能性があります。")
+
+        # Log training loss
+        self.log("train_loss", loss)
         self.log("train_acc", acc, prog_bar=True)
         
         return loss
@@ -78,15 +117,24 @@ class Model(pl.LightningModule):
         preds = torch.argmax(outputs, dim=1)
         acc = (preds == t).float().mean()
         
+        # # [DEBUG] 検証状況の詳細出力
+        # print(f"[Train] Epoch={self.current_epoch} Batch={batch} Batchid={batch_idx} Size={len(t)} | Loss={loss.item():.4f} Acc={acc.item():.4f}")
+        
         self.validation_step_outputs.append({"val_loss": loss, "val_acc": acc})
         return {"val_loss": loss, "val_acc": acc}
 
     def on_validation_epoch_end(self):
         outputs = self.validation_step_outputs
-        if not outputs: return
+        if not outputs: 
+            print(f"[Val End] Epoch={self.current_epoch}: No outputs recorded.")
+            return
             
         avg_loss = torch.stack([x["val_loss"] for x in outputs]).mean()
         avg_acc = torch.stack([x["val_acc"] for x in outputs]).mean()
+        
+        # [DEBUG] 検証全体の集計結果出力
+        # 合計何バッチ処理したか(Steps)が重要
+        print(f"[Val End] Epoch={self.current_epoch}: Steps={len(outputs)} AvgLoss={avg_loss.item():.4f} AvgAcc={avg_acc.item():.4f}")
         
         self.log("val_loss", avg_loss, prog_bar=True)
         self.log("val_acc", avg_acc, prog_bar=True)

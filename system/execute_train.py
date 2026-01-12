@@ -73,9 +73,9 @@ def main(cfg):
     save_dir = os.path.join("output", "experiments", hash_id)
     print(f"Experiment Hash ID: {hash_id}")
 
-    if os.path.exists(save_dir) and os.path.exists(os.path.join(save_dir, "done")):
-        print(">> Experiment already finished. Skipping.")
-        return
+    # if os.path.exists(save_dir) and os.path.exists(os.path.join(save_dir, "done")):
+    #     print(">> Experiment already finished. Skipping.")
+    #     return
     
     os.makedirs(save_dir, exist_ok=True)
 
@@ -146,21 +146,23 @@ def main(cfg):
     # 9. 学習実行
     checkpoint_callback = ModelCheckpoint(
         dirpath=ckpt_dir,          # 保存ディレクトリ (lightning_logs/checkpoints)
-        every_n_epochs=15,         # 50エポックごと保存
+        every_n_epochs=5,         # 50エポックごと保存
         save_last=True,            # last.ckpt を常に保存
         monitor="val_acc",         # 監視メトリクス (モデルでlogされるval_acc)
         mode="max",                # val_acc を最大化
-        save_top_k=1              # ベスト1つだけ残す (他は自動削除)
+        save_top_k=-1              # ベスト1つだけ残す (他は自動削除)
     )
 
     trainer = pl.Trainer(
         default_root_dir=save_dir,
         logger=logger,
-        max_epochs=user_model_params.get("epochs", 5),
+        max_epochs=user_common_params.get("max_epochs"),
         accelerator="auto",
         devices=1,
         callbacks=[checkpoint_callback],
-        enable_progress_bar=False
+        enable_progress_bar=False,
+        # NaNが出たら即座に停止し、発生箇所の詳細なスタックトレースを表示する
+        detect_anomaly=True
     )
     
     # ckpt_path引数を渡すことで、前回の中断地点から学習を再開できる
