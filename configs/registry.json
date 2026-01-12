@@ -12,6 +12,26 @@
                     "config_file": "config.py",
                     "main_file": "adapter.py",
                     "plot_file": "plot.py"
+                },
+                "rcnp": {
+                    "base_dir": "adapters/rcnp",
+                    "config_file": "config.py",
+                    "main_file": "adapter.py",
+                    "plot_file": "plot.py"
+                }
+            }
+        },
+        "baseline_mlp": {
+            "base_dir": "definitions/models/baseline_mlp",
+            "config_file": "config.py",
+            "main_file": "model.py",
+            "plot_file": "plots.py",
+            "adapters": {
+                "rcnp": {
+                    "base_dir": "adapters/rcnp",
+                    "config_file": "config.py",
+                    "main_file": "adapter.py",
+                    "plot_file": "plot.py"
                 }
             }
         }
@@ -19,6 +39,12 @@
     "datasets": {
         "mnist": {
             "base_dir": "definitions/datasets/mnist",
+            "config_file": "config.py",
+            "main_file": "datamodule.py",
+            "plot_file": "plots.py"
+        },
+        "rcnp": {
+            "base_dir": "definitions/datasets/rcnp",
             "config_file": "config.py",
             "main_file": "datamodule.py",
             "plot_file": "plots.py"

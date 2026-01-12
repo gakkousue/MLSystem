@@ -13,6 +13,8 @@ import pytorch_lightning as pl
 from system.hashing import compute_combined_hash
 from system.registry import Registry
 from system.inspector import find_config_class # common設定用に残す
+import pytorch_lightning as pl
+from pytorch_lightning.callbacks import ModelCheckpoint  # 新規追加
 
 @hydra.main(config_path="../configs", config_name="config", version_base=None)
 def main(cfg):
@@ -142,12 +144,23 @@ def main(cfg):
             print(f">> Found checkpoint. Resuming from: {ckpt_path}")
 
     # 9. 学習実行
+    checkpoint_callback = ModelCheckpoint(
+        dirpath=ckpt_dir,          # 保存ディレクトリ (lightning_logs/checkpoints)
+        every_n_epochs=15,         # 50エポックごと保存
+        save_last=True,            # last.ckpt を常に保存
+        monitor="val_acc",         # 監視メトリクス (モデルでlogされるval_acc)
+        mode="max",                # val_acc を最大化
+        save_top_k=1              # ベスト1つだけ残す (他は自動削除)
+    )
+
     trainer = pl.Trainer(
         default_root_dir=save_dir,
-        logger=logger,  # バージョン固定のロガーを使用
+        logger=logger,
         max_epochs=user_model_params.get("epochs", 5),
         accelerator="auto",
-        devices=1
+        devices=1,
+        callbacks=[checkpoint_callback],
+        enable_progress_bar=False
     )
     
     # ckpt_path引数を渡すことで、前回の中断地点から学習を再開できる

@@ -1,0 +1,8 @@
+{
+    "_name": "rcnp",
+    "data_dir": "/home01/sueyoshi/source/data/ILC_z2qq/04.h5_50000/MLMakeNtuple",
+    "max_particles": 100,
+    "train_ratio": 0.6,
+    "val_ratio": 0.2,
+    "num_workers": 0
+}
