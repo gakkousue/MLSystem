@@ -70,17 +70,34 @@ class BaselineModel(nn.Module):
         return out
 
 class Model(pl.LightningModule):
-    def __init__(self, n_units=100, num_classes=3, lr=0.01, step_size=200, **kwargs):
+    def __init__(self, **kwargs):
         super().__init__()
-        self.save_hyperparameters()
-        self.conf = kwargs
+        # パラメータの抽出と設定
+        self.setup_params(**kwargs)
         
-        self.net = BaselineModel(n_units=n_units, n_out=num_classes)
-        self.lr = lr
-        self.step_size = step_size
+        # BaselineModelの初期化には抽出した変数を使用
+        self.net = BaselineModel(n_units=self.n_units, n_out=self.num_classes)
         
         # Metrics storage
         self.validation_step_outputs = []
+
+    def setup_params(self, n_units=100, num_classes=3, lr=0.01, step_size=200, **kwargs):
+        """
+        モデルに必要なパラメータのみを定義し、デフォルト値を設定する。
+        不要なkwargsは無視される。
+        """
+        self.n_units = n_units
+        self.num_classes = num_classes
+        self.lr = lr
+        self.step_size = step_size
+
+        # 必要な変数のみをhparams.yamlに保存
+        self.save_hyperparameters({
+            "n_units": n_units,
+            "num_classes": num_classes,
+            "lr": lr,
+            "step_size": step_size
+        })
 
     def forward(self, a, p, n):
         return self.net(a, p, n)
@@ -104,8 +121,9 @@ class Model(pl.LightningModule):
             raise ValueError(f"エラー: Epoch={self.current_epoch}, Batch={batch_idx} でLossがNaNになりました。入力データが正規化されていない可能性があります。")
 
         # Log training loss
-        self.log("train_loss", loss)
-        self.log("train_acc", acc, prog_bar=True)
+        # stepごとではなくエポック終了時にまとめて平均値を記録・保存する
+        self.log("train_loss", loss, on_step=False, on_epoch=True, logger=True, prog_bar=True)
+        self.log("train_acc", acc, on_step=False, on_epoch=True, logger=True, prog_bar=True)
         
         return loss
 
@@ -136,8 +154,9 @@ class Model(pl.LightningModule):
         # 合計何バッチ処理したか(Steps)が重要
         print(f"[Val End] Epoch={self.current_epoch}: Steps={len(outputs)} AvgLoss={avg_loss.item():.4f} AvgAcc={avg_acc.item():.4f}")
         
-        self.log("val_loss", avg_loss, prog_bar=True)
-        self.log("val_acc", avg_acc, prog_bar=True)
+        # ロガーへも確実に保存する
+        self.log("val_loss", avg_loss, prog_bar=True, logger=True)
+        self.log("val_acc", avg_acc, prog_bar=True, logger=True)
         self.validation_step_outputs.clear()
         
         # Save metrics to JSON for plotting
