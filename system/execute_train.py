@@ -83,19 +83,17 @@ def main(cfg):
     # Adapterから変換関数(transform)を取得してDatasetに渡す
     input_transform = adapter_mod.get_input_transform(user_adapter_params)
     
-    # common設定(batch_size等)をデータ設定にマージして渡す
-    combined_data_params = {**user_common_params, **user_data_params}
-    
-    # DataModuleのインスタンス化 (create_datamodule関数ではなくクラスを直接使用する場合の想定だが
-    # 既存コードは create_datamodule を呼んでいた。
-    # Registryはクラスを返すように実装したが、モジュール自体も必要か？
-    # -> Datamodule定義が create_datamodule 関数方式ならモジュールが必要。
-    
-    # 修正: Datamoduleはクラス(LightningDataModule継承)として実装されているはず
-    # datamodule.py を見ると create_datamodule 関数もあるが、DataModuleクラスもある。
-    # Registry.get_main_class は DataModule クラスを返してくれるので、それを使う。
-    
-    datamodule = DataModuleClass(adapter_transform=input_transform, **combined_data_params)
+    # 全パラメータを統合する (Common < Dataset < Adapter < Model の順で上書き)
+    # これにより、ModelやDataModuleは自分以外のカテゴリの設定値にもアクセス可能になる
+    all_params = {}
+    all_params.update(user_common_params)
+    all_params.update(user_data_params)
+    all_params.update(user_adapter_params)
+    all_params.update(user_model_params)
+
+    # DataModuleのインスタンス化
+    # 以前は combined_data_params だったが、今は all_params を渡す
+    datamodule = DataModuleClass(adapter_transform=input_transform, **all_params)
     
     # 5. Modelの準備
     # Datasetのメタ情報を取得し、Adapterを通してModel用引数に変換する
@@ -108,8 +106,11 @@ def main(cfg):
     # Adapter: "このデータなら、Modelにはこういう引数(in_channels=1など)を渡してね"
     model_init_args = adapter_mod.get_model_init_args(data_meta, user_adapter_params)
     
-    # ユーザー設定とマージ (ユーザー設定が優先だが、構造的な引数はAdapter主導)
-    final_model_kwargs = {**user_model_params, **model_init_args}
+    # ユーザー設定 + 全パラメータ + 動的計算引数 をマージ
+    # model_init_args(動的) が最優先されるべきだが、ユーザー設定(all_params)で上書きしたい場合もあるか？
+    # 基本的には Adapter が計算した input_shape 等はユーザー設定より優先度が高い(整合性のため)とするのが自然だが、
+    # 既存実装に合わせ、ユーザー設定ベース(all_params) に model_init_args を上書きする形をとる
+    final_model_kwargs = {**all_params, **model_init_args}
     
     model = ModelClass(**final_model_kwargs)
 

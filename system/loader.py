@@ -88,17 +88,20 @@ class ExperimentLoader:
         input_transform = modules["adapter_mod"].get_input_transform(modules["adapter_params"])
         
         # 2. DataModule作成
-        # data_paramsだけでなく、common_params (batch_size等) も渡す必要がある
         # diff_payloadから共通設定も復元する
         import common.config as common_conf_mod
         common_params = self._restore_params(common_conf_mod, self.diff_payload.get("common_diff", {}))
-        
-        # パラメータを結合 (data_paramsが優先)
-        combined_data_params = {**common_params, **modules["data_params"]}
+
+        # パラメータ結合ロジックを execute_train.py と統一 (Common < Dataset < Adapter < Model)
+        all_params = {}
+        all_params.update(common_params)
+        all_params.update(modules["data_params"])
+        all_params.update(modules["adapter_params"])
+        all_params.update(modules["model_params"])
         
         # DataModuleクラスを使用
         DataModuleClass = modules["DataModuleClass"]
-        datamodule = DataModuleClass(adapter_transform=input_transform, **combined_data_params)
+        datamodule = DataModuleClass(adapter_transform=input_transform, **all_params)
 
         datamodule.prepare_data()
         datamodule.setup(stage=stage)
@@ -106,7 +109,9 @@ class ExperimentLoader:
         # 3. Model作成
         data_meta = {k: getattr(datamodule, k) for k in dir(datamodule) if not k.startswith('_')}
         model_init_args = modules["adapter_mod"].get_model_init_args(data_meta, modules["adapter_params"])
-        final_model_kwargs = {**modules["model_params"], **model_init_args}
+        
+        # Model引数の結合 (all_params + model_init_args)
+        final_model_kwargs = {**all_params, **model_init_args}
         
         # Modelクラスを使用
         ModelClass = modules["ModelClass"]
