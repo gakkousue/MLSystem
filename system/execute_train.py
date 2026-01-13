@@ -50,6 +50,8 @@ def main(cfg):
     )
 
     from system.checkpoint_manager import CheckpointManager
+    from system.callbacks import JobLoggingCallback # 追加
+
     ckpt_manager = CheckpointManager(save_dir)
     
     # 再開用チェックポイントの取得
@@ -64,15 +66,19 @@ def main(cfg):
         max_epochs=ctx.all_params.get("max_epochs"),
         accelerator="auto",
         devices=1,
-        callbacks=[ckpt_manager.create_callback()], # Managerから取得
+        callbacks=[
+            ckpt_manager.create_callback(),
+            JobLoggingCallback()
+        ], # Managerとログ用Callbackを設定
         enable_progress_bar=False,
         detect_anomaly=True
     )
     
+    # max_epochsに達している場合、Lightningは自動的に学習をスキップして終了する
     trainer.fit(ctx.model, ctx.datamodule, ckpt_path=ckpt_path)
 
-    with open(os.path.join(save_dir, "done"), "w") as f:
-        f.write("finished")
+    # doneファイルの作成は廃止
+    # 正常終了すればExit Code 0が返り、Runnerがそれを検知してジョブ完了とする
 
 if __name__ == "__main__":
     main()

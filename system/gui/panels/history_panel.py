@@ -56,7 +56,12 @@ class HistoryPanel(ttk.Frame):
                     m = conf.get("model", "-")
                     a = conf.get("adapter", "-")
                     d_set = conf.get("dataset", "-")
-                    status = "Finished" if os.path.exists(os.path.join(path, "done")) else "Ready"
+                    
+                    # doneファイルの代わりにチェックポイントディレクトリの有無で進捗ありかを判定
+                    ckpt_dir = os.path.join(path, "lightning_logs", "checkpoints")
+                    has_ckpt = os.path.exists(ckpt_dir) and len(os.listdir(ckpt_dir)) > 0
+                    
+                    status = "Active/Done" if has_ckpt else "Ready"
                     self.tree.insert("", "end", iid=d, values=(d, m, a, d_set, status))
                 except: pass
         

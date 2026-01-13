@@ -8,7 +8,6 @@ import yaml
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from system.registry import Registry
-from system.cli import CustomLightningCLI
 from pytorch_lightning.callbacks import ModelCheckpoint
 
 def convert_job_to_yaml(job_data, registry):

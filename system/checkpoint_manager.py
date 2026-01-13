@@ -48,7 +48,7 @@ class CheckpointManager:
         """学習用のModelCheckpointコールバックを作成する"""
         return ModelCheckpoint(
             dirpath=self.ckpt_dir,
-            every_n_epochs=5,
+            every_n_epochs=1,
             save_last=True,
             monitor="val_acc",
             mode="max",
