@@ -130,66 +130,16 @@ class ExperimentLoader:
     def get_checkpoints(self):
         """
         利用可能なチェックポイントの一覧を取得する。
-        return: List of dict {'epoch': int, 'path': str, 'type': 'epoch'|'last'}
         """
-        # checkpointディレクトリを探す
-        # 構造: output/experiments/{hash}/lightning_logs/version_*/checkpoints/*.ckpt
-        # または output/experiments/{hash}/lightning_logs/checkpoints/*.ckpt (versionなしの場合)
-        
-        log_dir = os.path.join(self.exp_dir, "lightning_logs")
-        if not os.path.exists(log_dir):
-            return []
-            
-        candidate_files = []
-        
-        # 再帰的に .ckpt を探す
-        for root, dirs, files in os.walk(log_dir):
-            for file in files:
-                if file.endswith(".ckpt"):
-                    candidate_files.append(os.path.join(root, file))
-        
-        results = []
-        for path in candidate_files:
-            fname = os.path.basename(path)
-            info = {"path": path, "type": "unknown", "epoch": -1}
-            
-            if fname == "last.ckpt":
-                info["type"] = "last"
-                # last.ckptの中身を見ないとepochは不明だが、ここでは一旦区別する
-            else:
-                # epoch=X-step=Y.ckpt の形式をパース
-                m = re.search(r"epoch=(\d+)", fname)
-                if m:
-                    info["epoch"] = int(m.group(1))
-                    info["type"] = "epoch"
-            
-            results.append(info)
-            
-        # エポック順にソート (lastは除外または末尾へ)
-        # ここでは epoch が判明しているものを優先
-        results.sort(key=lambda x: x["epoch"])
-        return results
+        from system.checkpoint_manager import CheckpointManager
+        manager = CheckpointManager(self.exp_dir)
+        return manager.list_checkpoints()
 
     def get_checkpoint_path(self, epoch=None):
         """
         指定エポックのCKPTパスを返す。
         epoch=Noneの場合は 'last.ckpt' または 最もエポック数が大きいものを返す。
         """
-        ckpts = self.get_checkpoints()
-        if not ckpts:
-            return None
-            
-        if epoch is not None:
-            # 指定エポックを探す
-            for c in ckpts:
-                if c["epoch"] == epoch:
-                    return c["path"]
-            return None
-        else:
-            # 最新を探す
-            # 'last.ckpt' があればそれを優先
-            last = next((c for c in ckpts if c["type"] == "last"), None)
-            if last:
-                return last["path"]
-            # なければエポック最大のもの
-            return ckpts[-1]["path"]
+        from system.checkpoint_manager import CheckpointManager
+        manager = CheckpointManager(self.exp_dir)
+        return manager.get_path(epoch)
