@@ -76,10 +76,11 @@ class Registry:
         if not os.path.exists(path):
             raise FileNotFoundError(f"Module file not found: {path}")
             
-        # モジュール名を作成 (一意にするため、相対パスをベースにする)
-        # 例: definitions/models/resnet/config.py -> definitions_models_resnet_config
-        rel_path = os.path.relpath(path, self.cwd)
-        module_name = os.path.splitext(rel_path)[0].replace(os.sep, "_").replace(".", "_")
+                # モジュール名を作成 (Pythonの標準インポート形式に合わせる)
+        # 例: definitions/models/resnet/config.py -> definitions.models.resnet.config
+        proj_root = os.path.normpath(self.data.get("project_root", self.cwd))
+        rel_path = os.path.relpath(path, proj_root)
+        module_name = os.path.splitext(rel_path)[0].replace(os.sep, ".")
         
         spec = importlib.util.spec_from_file_location(module_name, path)
         if spec and spec.loader:

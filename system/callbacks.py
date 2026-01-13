@@ -21,7 +21,7 @@ class JobLoggingCallback(pl.Callback):
 
     def on_validation_epoch_end(self, trainer, pl_module):
         # Sanity Check中はスキップ
-        if trainer.sanitizing:
+        if trainer.sanity_checking:
             return
 
         epoch = trainer.current_epoch

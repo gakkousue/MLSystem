@@ -7,6 +7,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 
 import json
 import importlib
+import torch # 追加
 import hydra
 from omegaconf import OmegaConf
 import pytorch_lightning as pl
@@ -58,6 +59,24 @@ def main(cfg):
     ckpt_path = ckpt_manager.get_resume_path()
     if ckpt_path:
         print(f">> Found checkpoint. Resuming from: {ckpt_path}")
+
+        # すでに学習完了済みかチェックして、完了していれば正常終了する
+        max_epochs = ctx.all_params.get("max_epochs")
+        if max_epochs is not None:
+            try:
+                # チェックポイントをCPUにロードしてエポック数を確認
+                checkpoint = torch.load(ckpt_path, map_location="cpu")
+                saved_epoch = checkpoint.get("epoch", -1)
+                
+                # saved_epochは0始まりの完了エポックインデックス (例: epoch=9 は10エポック目完了)
+                # したがって、学習済みエポック数は saved_epoch + 1
+                finished_epochs = saved_epoch + 1
+                
+                if finished_epochs >= max_epochs:
+                    print(f"[DONE] [Skip] Training already reached max_epochs ({max_epochs}). Exiting.")
+                    sys.exit(0)
+            except Exception as e:
+                print(f"[Warning] Failed to inspect checkpoint: {e}")
 
     # 4. 学習実行
     trainer = pl.Trainer(
