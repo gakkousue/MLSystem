@@ -8,14 +8,12 @@ import shutil
 import glob
 import signal
 
-# 環境変数を設定し、sys.pathに必要なパスを追加
-
-
 from MLsystem.queue_manager import QueueManager
 from MLsystem.utils.env_manager import EnvManager
 
 # PIDファイル（プロセスの名札）
 PID_FILE = os.path.join(EnvManager().queue_dir, "runner.pid")
+
 
 def setup_dirs(root):
     dirs = {
@@ -29,13 +27,14 @@ def setup_dirs(root):
         os.makedirs(d, exist_ok=True)
     return dirs
 
+
 class Runner:
     def __init__(self):
         self.current_process = None
         self.queue_root = EnvManager().queue_dir
         self.dirs = setup_dirs(self.queue_root)
         self.running = True
-        self.qm = QueueManager() # QueueManagerを初期化
+        self.qm = QueueManager()  # QueueManagerを初期化
 
         # シグナル（停止命令）を受け取る設定
         signal.signal(signal.SIGTERM, self.handle_signal)
@@ -45,7 +44,7 @@ class Runner:
         """停止命令が来たら実行される"""
         print(f"🛑 Signal {signum} received. Stopping...")
         self.running = False
-        
+
         # 子プロセス（学習）が動いていたら道連れにする
         if self.current_process and self.current_process.poll() is None:
             print("Killing current training process...")
@@ -54,7 +53,7 @@ class Runner:
                 self.current_process.wait(timeout=5)
             except subprocess.TimeoutExpired:
                 self.current_process.kill()
-        
+
         self.cleanup()
         sys.exit(0)
 
@@ -77,7 +76,7 @@ class Runner:
             while self.running:
                 # 1. QueueManagerから次のジョブIDを取得 (リスト管理)
                 job_id = self.qm.pop()
-                
+
                 if not job_id:
                     # ジョブがない場合は終了
                     print("✅ No more jobs in queue list. Exiting.")
@@ -86,25 +85,25 @@ class Runner:
                 # 2. ジョブファイルの特定
                 # ファイル名は job_{id}.json と決まっている
                 pending_path = os.path.join(self.dirs["pending"], f"job_{job_id}.json")
-                
+
                 if not os.path.exists(pending_path):
                     print(f"⚠️ Job file not found for ID: {job_id}")
                     continue
 
                 self.process_job(pending_path, job_id)
-                
+
         finally:
             self.cleanup()
 
     def process_job(self, job_path, job_id):
         filename = os.path.basename(job_path)
         running_path = os.path.join(self.dirs["running"], filename)
-        
+
         # pending -> running 移動
         try:
             shutil.move(job_path, running_path)
         except FileNotFoundError:
-            return # 他のプロセスが取った場合はスキップ
+            return  # 他のプロセスが取った場合はスキップ
 
         with open(running_path, "r") as f:
             job_data = json.load(f)
@@ -119,30 +118,27 @@ class Runner:
         else:
             # 通常の学習 (execute_train.py)
             cmd = [sys.executable, "-m", "MLsystem.execute_train"] + job_data["args"]
-        
+
         start_time = time.time()
-        
+
         # ログファイルのパス設定
         log_filename = f"job_{job_id}.log"
         log_path = os.path.join(self.dirs["logs"], log_filename)
 
         # ログファイルを開いて、標準出力・標準エラー出力を書き込む
         with open(log_path, "w", encoding="utf-8") as log_file:
-          # プロセスを保持しておく（停止時に道連れにするため）
-          # stdout, stderrをログファイルにリダイレクト
-          # env=os.environで環境変数を子プロセスに引き継ぐ
-          self.current_process = subprocess.Popen(
-            cmd, 
-            stdout=log_file, 
-            stderr=subprocess.STDOUT,
-            env=os.environ
-          )
-          
-          # 終了待ち
-          return_code = self.current_process.wait()
-        
+            # プロセスを保持しておく（停止時に道連れにするため）
+            # stdout, stderrをログファイルにリダイレクト
+            # env=os.environで環境変数を子プロセスに引き継ぐ
+            self.current_process = subprocess.Popen(
+                cmd, stdout=log_file, stderr=subprocess.STDOUT, env=os.environ
+            )
+
+            # 終了待ち
+            return_code = self.current_process.wait()
+
         duration = time.time() - start_time
-        self.current_process = None # 終わったらクリア
+        self.current_process = None  # 終わったらクリア
 
         # 結果移動
         if return_code == 0:
@@ -156,7 +152,7 @@ class Runner:
             error_msg = self._tail_log(log_path)
 
         shutil.move(running_path, dest)
-        
+
         # ステータス更新
         with open(dest, "r+") as f:
             data = json.load(f)
@@ -166,7 +162,7 @@ class Runner:
             data["log_file"] = log_path
             if error_msg:
                 data["error_message"] = error_msg
-            
+
             f.seek(0)
             json.dump(data, f, indent=4)
             f.truncate()
@@ -175,7 +171,7 @@ class Runner:
         if status == "finished":
             self.cleanup_old_jobs(self.dirs["finished"], keep_limit=20)
             # 成功した場合、古いログファイルも掃除しても良いが、今回は残す方針とする
-            
+
     def _tail_log(self, path, lines=20):
         """ログファイルの末尾を取得するヘルパー"""
         try:
@@ -195,10 +191,10 @@ class Runner:
 
             # 更新日時が古い順にソート
             files.sort(key=os.path.getmtime)
-            
+
             # 削除対象: 全体数 - 残す数
             num_to_delete = len(files) - keep_limit
-            
+
             for f in files[:num_to_delete]:
                 try:
                     os.remove(f)
@@ -207,6 +203,7 @@ class Runner:
                     print(f"⚠️ Failed to delete {f}: {e}")
         except Exception:
             pass
+
 
 if __name__ == "__main__":
     runner = Runner()

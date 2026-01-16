@@ -5,13 +5,14 @@ import tempfile
 import shutil
 import subprocess
 
+
 def create_dummy_environment(base_dir):
     """ダミーの環境（ディレクトリ構成と設定ファイル）を作成する"""
     dirs = {
-        "common": os.path.join(base_dir, "common"),
-        "output": os.path.join(base_dir, "output"),
-        "queue": os.path.join(base_dir, "queue"),
-        "configs": os.path.join(base_dir, "configs"),
+        "common": os.path.join(base_dir, "test_common"),
+        "output": os.path.join(base_dir, "test_output"),
+        "queue": os.path.join(base_dir, "test_queue"),
+        "configs": os.path.join(base_dir, "test_configs"),
     }
     for d in dirs.values():
         os.makedirs(d, exist_ok=True)
@@ -21,7 +22,7 @@ def create_dummy_environment(base_dir):
         "common_dir": dirs["common"],
         "output_dir": dirs["output"],
         "queue_dir": dirs["queue"],
-        "registry_path": os.path.join(dirs["configs"], "registry.json")
+        "registry_path": os.path.join(dirs["configs"], "registry.json"),
     }
     env_config_path = os.path.join(base_dir, "env_config.json")
     with open(env_config_path, "w") as f:
@@ -29,9 +30,9 @@ def create_dummy_environment(base_dir):
 
     # registry.json
     registry_data = {
-        "project_root": "..", # base_dir relative to configs
+        "project_root": "..",  # base_dir relative to configs
         "models": {},
-        "datasets": {}
+        "datasets": {},
     }
     with open(env_config["registry_path"], "w") as f:
         json.dump(registry_data, f)
@@ -49,16 +50,17 @@ class CommonConfig:
 
     return env_config_path
 
+
 def verify_system():
     # テスト用のディレクトリを作成
     with tempfile.TemporaryDirectory() as temp_dir:
         print(f"Creating dummy environment in {temp_dir}")
         env_config_path = create_dummy_environment(temp_dir)
-        
+
         # 環境変数を設定
         env = os.environ.copy()
         env["MLSYSTEM_CONFIG"] = env_config_path
-        
+
         # Pythonスクリプトをサブプロセスで実行し、インポートと初期化をテスト
         # カレントディレクトリは temp_dir に移動し、CWD依存がないか確認
         script_code = """
@@ -112,19 +114,20 @@ except Exception as e:
             cwd=temp_dir,
             env=env,
             capture_output=True,
-            text=True
+            text=True,
         )
-        
+
         print("--- Output ---")
         print(result.stdout)
         print("--- Error ---")
         print(result.stderr)
-        
+
         if result.returncode == 0 and "VERIFICATION SUCCESS" in result.stdout:
             print(">> Verification Passed!")
         else:
             print(">> Verification Failed!")
             sys.exit(1)
+
 
 if __name__ == "__main__":
     verify_system()

@@ -5,11 +5,9 @@ import importlib.util
 import inspect
 from dataclasses import is_dataclass
 
-# 環境変数を設定し、sys.pathに必要なパスを追加
-
-
 from MLsystem.utils.config_base import BaseConfig
 from MLsystem.utils.env_manager import EnvManager
+
 
 class Registry:
     def __init__(self):
@@ -33,11 +31,11 @@ class Registry:
         if not os.path.isabs(proj_root):
             # プロジェクトルートが相対パスの場合、レジストリファイルの場所を基準にする
             proj_root = os.path.join(self.registry_dir, proj_root)
-        
+
         # base_dir の解決
         if not os.path.isabs(base_path):
             base_path = os.path.join(proj_root, base_path)
-            
+
         # ターゲットファイルの解決
         full_path = os.path.join(base_path, rel_path)
         return os.path.normpath(full_path)
@@ -53,19 +51,21 @@ class Registry:
         if not info:
             raise ValueError(f"Dataset '{dataset_name}' not found in registry.")
         return info
-    
+
     def get_adapter_info(self, model_name, adapter_name):
         model_info = self.get_model_info(model_name)
         adapters = model_info.get("adapters", {})
         info = adapters.get(adapter_name)
         if not info:
-            raise ValueError(f"Adapter '{adapter_name}' not found in model '{model_name}'.")
-        
+            raise ValueError(
+                f"Adapter '{adapter_name}' not found in model '{model_name}'."
+            )
+
         # Adapterのbase_dirはModelのbase_dirからの相対パスとして扱う仕様
         # しかしJSON上ではパス文字列として結合する必要がある
         model_base = model_info.get("base_dir", "")
         adapter_base = info.get("base_dir", "")
-        
+
         # 情報をコピーしてbase_dirを結合済みのものに書き換えて返す
         merged_info = info.copy()
         merged_info["base_dir"] = os.path.join(model_base, adapter_base)
@@ -77,24 +77,24 @@ class Registry:
         filename = info.get(file_key)
         if not filename:
             raise ValueError(f"Key '{file_key}' not defined in registry info.")
-            
+
         path = self._resolve_path(base_dir, filename)
-        
+
         if not os.path.exists(path):
             raise FileNotFoundError(f"Module file not found: {path}")
-            
-                # モジュール名を作成 (Pythonの標準インポート形式に合わせる)
+
+            # モジュール名を作成 (Pythonの標準インポート形式に合わせる)
         # 例: definitions/models/resnet/config.py -> definitions.models.resnet.config
         proj_root = os.path.normpath(self.data.get("project_root", self.registry_dir))
         if not os.path.isabs(proj_root):
-             proj_root = os.path.join(self.registry_dir, proj_root)
+            proj_root = os.path.join(self.registry_dir, proj_root)
         rel_path = os.path.relpath(path, proj_root)
         module_name = os.path.splitext(rel_path)[0].replace(os.sep, ".")
-        
+
         spec = importlib.util.spec_from_file_location(module_name, path)
         if spec and spec.loader:
             module = importlib.util.module_from_spec(spec)
-            sys.modules[module_name] = module # キャッシュ登録
+            sys.modules[module_name] = module  # キャッシュ登録
             spec.loader.exec_module(module)
             return module
         else:
@@ -112,16 +112,18 @@ class Registry:
 
                 if is_dataclass_type and is_dataclass(obj):
                     candidates.append(obj)
-                elif base_class and issubclass(obj, base_class) and obj is not base_class:
+                elif (
+                    base_class and issubclass(obj, base_class) and obj is not base_class
+                ):
                     candidates.append(obj)
-        
+
         # 優先順位などのロジックがあればここで適用
         # BaseConfig継承クラスを優先するロジック (Config用)
         if is_dataclass_type and base_class:
-             for c in candidates:
+            for c in candidates:
                 if issubclass(c, base_class):
                     return c
-        
+
         if candidates:
             return candidates[0]
         return None
@@ -130,7 +132,7 @@ class Registry:
 
     def get_config_class(self, category, name, sub_name=None):
         if category == "models":
-            if sub_name: # Adapter
+            if sub_name:  # Adapter
                 info = self.get_adapter_info(name, sub_name)
             else:
                 info = self.get_model_info(name)
@@ -138,19 +140,21 @@ class Registry:
             info = self.get_dataset_info(name)
         else:
             raise ValueError(f"Unknown category: {category}")
-            
+
         mod = self.load_module_from_info(info, "config_file")
-        return self.find_class_in_module(mod, base_class=BaseConfig, is_dataclass_type=True)
+        return self.find_class_in_module(
+            mod, base_class=BaseConfig, is_dataclass_type=True
+        )
 
     def get_main_class(self, category, name):
         """Model(LightningModule) または DataModule クラスを取得"""
         import pytorch_lightning as pl
-        
+
         if category == "models":
             info = self.get_model_info(name)
             mod = self.load_module_from_info(info, "main_file")
             return self.find_class_in_module(mod, base_class=pl.LightningModule)
-            
+
         elif category == "datasets":
             info = self.get_dataset_info(name)
             mod = self.load_module_from_info(info, "main_file")

@@ -5,6 +5,7 @@ import json
 from datetime import datetime
 from MLsystem.utils.env_manager import EnvManager
 
+
 class HistoryPanel(ttk.Frame):
     def __init__(self, parent, app):
         super().__init__(parent)
@@ -16,23 +17,27 @@ class HistoryPanel(ttk.Frame):
         # 1. 上部アクションエリア (Monitorと同様の配置)
         action_frame = ttk.Frame(self)
         action_frame.pack(side=tk.TOP, fill=tk.X, padx=5, pady=5)
-        
+
         # ボタンを右寄せで配置
-        ttk.Button(action_frame, text="🔄 Reload Experiments", command=self.load_history).pack(side=tk.RIGHT, padx=5)
+        ttk.Button(
+            action_frame, text="🔄 Reload Experiments", command=self.load_history
+        ).pack(side=tk.RIGHT, padx=5)
 
         # 2. リスト表示エリア
         list_frame = ttk.Frame(self)
         list_frame.pack(side=tk.TOP, fill=tk.BOTH, expand=True, padx=5, pady=5)
-        
+
         cols = ("HashID", "Model", "Adapter", "Dataset", "Status")
-        self.tree = ttk.Treeview(list_frame, columns=cols, show="headings", selectmode="browse")
+        self.tree = ttk.Treeview(
+            list_frame, columns=cols, show="headings", selectmode="browse"
+        )
         for c in cols:
             self.tree.heading(c, text=c)
             self.tree.column(c, width=100)
-            
+
         ysb = ttk.Scrollbar(list_frame, orient=tk.VERTICAL, command=self.tree.yview)
         self.tree.configure(yscroll=ysb.set)
-        
+
         self.tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         ysb.pack(side=tk.RIGHT, fill=tk.Y)
 
@@ -42,29 +47,34 @@ class HistoryPanel(ttk.Frame):
 
     def load_history(self):
         root = os.path.join(EnvManager().output_dir, "experiments")
-        if not os.path.exists(root): return
-        
+        if not os.path.exists(root):
+            return
+
         sel = self.tree.selection()
         for item in self.tree.get_children():
             self.tree.delete(item)
-            
+
         for d in os.listdir(root):
             path = os.path.join(root, d)
             conf_path = os.path.join(path, "config_diff.json")
             if os.path.isdir(path) and os.path.exists(conf_path):
                 try:
-                    with open(conf_path, "r") as f: conf = json.load(f)
+                    with open(conf_path, "r") as f:
+                        conf = json.load(f)
                     m = conf.get("model", "-")
                     a = conf.get("adapter", "-")
                     d_set = conf.get("dataset", "-")
-                    
+
                     # doneファイルの代わりにチェックポイントディレクトリの有無で進捗ありかを判定
                     ckpt_dir = os.path.join(path, "lightning_logs", "checkpoints")
-                    has_ckpt = os.path.exists(ckpt_dir) and len(os.listdir(ckpt_dir)) > 0
-                    
+                    has_ckpt = (
+                        os.path.exists(ckpt_dir) and len(os.listdir(ckpt_dir)) > 0
+                    )
+
                     status = "Active/Done" if has_ckpt else "Ready"
                     self.tree.insert("", "end", iid=d, values=(d, m, a, d_set, status))
-                except: pass
-        
+                except:
+                    pass
+
         if sel and self.tree.exists(sel[0]):
             self.tree.selection_set(sel[0])

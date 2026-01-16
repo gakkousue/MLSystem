@@ -5,10 +5,17 @@ import copy
 
 from dataclasses import fields
 
-def compute_combined_hash(common_cls, common_params, 
-                          model_cls, model_params, 
-                          adapter_cls, adapter_params,
-                          data_cls, data_params):
+
+def compute_combined_hash(
+    common_cls,
+    common_params,
+    model_cls,
+    model_params,
+    adapter_cls,
+    adapter_params,
+    data_cls,
+    data_params,
+):
     """
     Configクラス定義とパラメータからハッシュIDを生成する。
     dataclassのmetadataにある "ignore": True の項目は除外する。
@@ -20,7 +27,7 @@ def compute_combined_hash(common_cls, common_params,
         "common_diff": {},
         "model_diff": {},
         "adapter_diff": {},
-        "data_diff": {}
+        "data_diff": {},
     }
 
     def process_params(config_cls, params, target_dict):
@@ -32,13 +39,13 @@ def compute_combined_hash(common_cls, common_params,
             # ignoreフラグがTrueなら除外
             if f.metadata.get("ignore", False):
                 continue
-            
+
             # 内部管理用フィールド(_nameなど)も除外したければここで判定
             # ただし _name は ignore=True になっていなくても値が変わらないはずなので問題ない
-            
+
             default = f.default
             val = params.get(f.name, default)
-            
+
             # デフォルト値と異なる場合のみ記録
             # 型が違う場合(int vs float)の比較には注意が必要だが、
             # 基本的にGUI/CLIからの入力値とデフォルト値の比較を行う
@@ -52,7 +59,7 @@ def compute_combined_hash(common_cls, common_params,
     process_params(data_cls, data_params, payload["data_diff"])
 
     # JSON化してハッシュ計算
-    encoded = json.dumps(payload, sort_keys=True).encode('utf-8')
+    encoded = json.dumps(payload, sort_keys=True).encode("utf-8")
     hash_id = hashlib.md5(encoded).hexdigest()[:10]
 
     return hash_id, payload

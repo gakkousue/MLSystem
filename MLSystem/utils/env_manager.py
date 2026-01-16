@@ -3,6 +3,7 @@ import json
 import importlib.util
 import sys
 
+
 class EnvManager:
     _instance = None
 
@@ -16,7 +17,7 @@ class EnvManager:
         config_path = os.environ.get("MLSYSTEM_CONFIG")
         if not config_path:
             raise RuntimeError("Environment variable 'MLSYSTEM_CONFIG' is not set.")
-        
+
         if not os.path.exists(config_path):
             raise RuntimeError(f"Config file not found at: {config_path}")
 
@@ -30,7 +31,7 @@ class EnvManager:
         required_keys = ["common_dir", "output_dir", "queue_dir", "registry_path"]
         missing = [k for k in required_keys if k not in self.config]
         if missing:
-             raise RuntimeError(f"Missing required keys in env config: {missing}")
+            raise RuntimeError(f"Missing required keys in env config: {missing}")
 
     @property
     def common_dir(self):
@@ -52,13 +53,15 @@ class EnvManager:
         """commonディレクトリにあるconfig.pyをモジュールとして読み込んで返す"""
         config_py_path = os.path.join(self.common_dir, "config.py")
         if not os.path.exists(config_py_path):
-             raise FileNotFoundError(f"Common config file not found at: {config_py_path}")
-        
+            raise FileNotFoundError(
+                f"Common config file not found at: {config_py_path}"
+            )
+
         module_name = "common.config"
         spec = importlib.util.spec_from_file_location(module_name, config_py_path)
         if spec and spec.loader:
             module = importlib.util.module_from_spec(spec)
-            sys.modules[module_name] = module # キャッシュ登録
+            sys.modules[module_name] = module  # キャッシュ登録
             spec.loader.exec_module(module)
             return module
         else:

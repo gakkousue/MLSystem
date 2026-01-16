@@ -6,9 +6,6 @@ import torch
 import importlib.util
 from omegaconf import OmegaConf
 
-# 環境変数を設定し、sys.pathに必要なパスを追加
-
-
 from MLsystem.registry import Registry
 from MLsystem.inspector import find_config_class
 from MLsystem.checkpoint_manager import CheckpointManager
@@ -19,21 +16,22 @@ class ExperimentLoader:
     """
     実験ID(Hash)に基づき、設定・モデル・データセット・チェックポイントを復元するクラス。
     """
+
     def __init__(self, hash_id):
         self.hash_id = hash_id
         self.exp_dir = os.path.join(EnvManager().output_dir, "experiments", hash_id)
         self.config_path = os.path.join(self.exp_dir, "config_diff.json")
-        
+
         if not os.path.exists(self.config_path):
             raise FileNotFoundError(f"Config not found for experiment {hash_id}")
-            
+
         with open(self.config_path, "r") as f:
             self.diff_payload = json.load(f)
-            
+
         self.model_name = self.diff_payload["model"]
         self.adapter_name = self.diff_payload.get("adapter")
         self.dataset_name = self.diff_payload["dataset"]
-        
+
         self.registry = Registry()
 
     def _restore_params(self, config_cls, diff):
@@ -44,14 +42,14 @@ class ExperimentLoader:
         if not config_cls:
             # 見つからない場合はdiffをそのまま返す（フォールバック）
             return diff or {}
-            
+
         # デフォルト設定を作成 (OmegaConf)
         conf = OmegaConf.structured(config_cls)
-        
+
         # 差分をマージ
         if diff:
             conf = OmegaConf.merge(conf, diff)
-            
+
         # 辞書に戻して返す
         return OmegaConf.to_container(conf, resolve=True)
 
@@ -60,26 +58,38 @@ class ExperimentLoader:
         try:
             # クラス/モジュール読み込み (Registry)
             ModelClass = self.registry.get_main_class("models", self.model_name)
-            adapter_mod = self.registry.get_adapter_module(self.model_name, self.adapter_name)
-            DataModuleClass = self.registry.get_main_class("datasets", self.dataset_name)
-            
+            adapter_mod = self.registry.get_adapter_module(
+                self.model_name, self.adapter_name
+            )
+            DataModuleClass = self.registry.get_main_class(
+                "datasets", self.dataset_name
+            )
+
             # Configクラス読み込み
             model_cls = self.registry.get_config_class("models", self.model_name)
-            adapter_cls = self.registry.get_config_class("models", self.model_name, self.adapter_name)
+            adapter_cls = self.registry.get_config_class(
+                "models", self.model_name, self.adapter_name
+            )
             data_cls = self.registry.get_config_class("datasets", self.dataset_name)
-            
+
             # パラメータ復元
-            model_params = self._restore_params(model_cls, self.diff_payload.get("model_diff", {}))
-            adapter_params = self._restore_params(adapter_cls, self.diff_payload.get("adapter_diff", {}))
-            data_params = self._restore_params(data_cls, self.diff_payload.get("data_diff", {}))
-            
+            model_params = self._restore_params(
+                model_cls, self.diff_payload.get("model_diff", {})
+            )
+            adapter_params = self._restore_params(
+                adapter_cls, self.diff_payload.get("adapter_diff", {})
+            )
+            data_params = self._restore_params(
+                data_cls, self.diff_payload.get("data_diff", {})
+            )
+
             return {
                 "ModelClass": ModelClass,
                 "adapter_mod": adapter_mod,
                 "DataModuleClass": DataModuleClass,
                 "model_params": model_params,
                 "adapter_params": adapter_params,
-                "data_params": data_params
+                "data_params": data_params,
             }
         except ImportError as e:
             raise ImportError(f"Failed to load definition modules: {e}")
@@ -90,14 +100,18 @@ class ExperimentLoader:
         return: (model, datamodule)
         """
         modules = self.load_modules()
-        
+
         # 1. AdapterからTransform取得
-        input_transform = modules["adapter_mod"].get_input_transform(modules["adapter_params"])
-        
+        input_transform = modules["adapter_mod"].get_input_transform(
+            modules["adapter_params"]
+        )
+
         # 2. DataModule作成
         # diff_payloadから共通設定も復元する
         common_conf_mod = EnvManager().get_common_config_module()
-        common_params = self._restore_params(common_conf_mod, self.diff_payload.get("common_diff", {}))
+        common_params = self._restore_params(
+            common_conf_mod, self.diff_payload.get("common_diff", {})
+        )
 
         # パラメータ結合ロジックを execute_train.py と統一 (Common < Dataset < Adapter < Model)
         all_params = {}
@@ -105,25 +119,29 @@ class ExperimentLoader:
         all_params.update(modules["data_params"])
         all_params.update(modules["adapter_params"])
         all_params.update(modules["model_params"])
-        
+
         # DataModuleクラスを使用
         DataModuleClass = modules["DataModuleClass"]
         datamodule = DataModuleClass(adapter_transform=input_transform, **all_params)
 
         datamodule.prepare_data()
         datamodule.setup(stage=stage)
-        
+
         # 3. Model作成
-        data_meta = {k: getattr(datamodule, k) for k in dir(datamodule) if not k.startswith('_')}
-        model_init_args = modules["adapter_mod"].get_model_init_args(data_meta, modules["adapter_params"])
-        
+        data_meta = {
+            k: getattr(datamodule, k) for k in dir(datamodule) if not k.startswith("_")
+        }
+        model_init_args = modules["adapter_mod"].get_model_init_args(
+            data_meta, modules["adapter_params"]
+        )
+
         # Model引数の結合 (all_params + model_init_args)
         final_model_kwargs = {**all_params, **model_init_args}
-        
+
         # Modelクラスを使用
         ModelClass = modules["ModelClass"]
         model = ModelClass(**final_model_kwargs)
-        
+
         return model, datamodule
 
     def load_model_from_checkpoint(self, ckpt_path):
@@ -131,7 +149,7 @@ class ExperimentLoader:
         model, _ = self.setup(stage="test")
         print(f"Loading weights from {ckpt_path}")
         checkpoint = torch.load(ckpt_path, map_location=lambda storage, loc: storage)
-        model.load_state_dict(checkpoint['state_dict'])
+        model.load_state_dict(checkpoint["state_dict"])
         return model
 
     def get_checkpoints(self):

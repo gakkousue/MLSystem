@@ -4,15 +4,18 @@ import json
 import time
 
 from MLsystem.utils.env_manager import EnvManager
+
 QUEUE_DIR = EnvManager().queue_dir
 LIST_FILE = os.path.join(QUEUE_DIR, "list.json")
 LOCK_DIR = os.path.join(QUEUE_DIR, "queue.lock")
+
 
 class FileLock:
     """
     ディレクトリ作成の原子性を利用した簡易ファイルロッククラス。
     複数のプロセス（GUI, Runner）が同時にリストを書き換えるのを防ぐ。
     """
+
     def __init__(self, lock_path, timeout=10):
         self.lock_path = lock_path
         self.timeout = timeout
@@ -36,11 +39,13 @@ class FileLock:
         except OSError:
             pass
 
+
 class QueueManager:
     """
     実行待ちジョブのIDリストを管理するクラス。
     queue/list.json を読み書きする。
     """
+
     def __init__(self):
         os.makedirs(QUEUE_DIR, exist_ok=True)
         # リストファイルがなければ初期化
@@ -84,7 +89,7 @@ class QueueManager:
             if job_id in q:
                 idx = q.index(job_id)
                 if idx > 0:
-                    q[idx], q[idx-1] = q[idx-1], q[idx]
+                    q[idx], q[idx - 1] = q[idx - 1], q[idx]
                     self._save_list(q)
                     return True
         return False
@@ -96,7 +101,7 @@ class QueueManager:
             if job_id in q:
                 idx = q.index(job_id)
                 if idx < len(q) - 1:
-                    q[idx], q[idx+1] = q[idx+1], q[idx]
+                    q[idx], q[idx + 1] = q[idx + 1], q[idx]
                     self._save_list(q)
                     return True
         return False
@@ -118,7 +123,7 @@ class QueueManager:
             if job_id in q:
                 q.remove(job_id)
                 self._save_list(q)
-                
+
     def get_list(self):
         """現在のキューリストを取得（読み取り専用、GUI表示用）"""
         # 読み取りだけでもロックを一瞬かけることで、書き込み中の不完全な状態を読むのを防ぐ

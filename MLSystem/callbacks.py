@@ -6,13 +6,14 @@ from rich.table import Table
 
 console = Console()
 
+
 class JobLoggingCallback(pl.Callback):
     """
     学習進捗を JobLog 形式で出力。
     enable_progress_bar=False の環境でも self.log で保存した全てのメトリクスを
     rich でテーブル表示して見やすくする。
     """
-    
+
     def on_train_start(self, trainer, pl_module):
         print(f"[JobLog] Training started. Max epochs: {trainer.max_epochs}")
 
