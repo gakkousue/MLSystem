@@ -3,7 +3,8 @@ import os
 import json
 import time
 
-QUEUE_DIR = "queue"
+from MLsystem.utils.env_manager import EnvManager
+QUEUE_DIR = EnvManager().queue_dir
 LIST_FILE = os.path.join(QUEUE_DIR, "list.json")
 LOCK_DIR = os.path.join(QUEUE_DIR, "queue.lock")
 

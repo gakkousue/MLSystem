@@ -3,6 +3,7 @@ from tkinter import ttk
 import os
 import json
 from datetime import datetime
+from MLsystem.utils.env_manager import EnvManager
 
 class HistoryPanel(ttk.Frame):
     def __init__(self, parent, app):
@@ -40,7 +41,7 @@ class HistoryPanel(ttk.Frame):
         self.after(5000, self.start_auto_refresh)
 
     def load_history(self):
-        root = os.path.join("output", "experiments")
+        root = os.path.join(EnvManager().output_dir, "experiments")
         if not os.path.exists(root): return
         
         sel = self.tree.selection()

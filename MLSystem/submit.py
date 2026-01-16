@@ -11,6 +11,7 @@ import signal
 
 
 from MLsystem.queue_manager import QueueManager
+from MLsystem.utils.env_manager import EnvManager
 
 # 外部から呼び出し可能な関数にする
 def add_job(args, task_type="train", condition=None, extra_data=None):
@@ -23,7 +24,7 @@ def add_job(args, task_type="train", condition=None, extra_data=None):
   extra_data: その他の保存したいメタデータ (dict, optional)
               例: {"hash_id": "...", "target_class": "ConfusionMatrix"}
   """
-  queue_root = os.path.join(os.getcwd(), "queue")
+  queue_root = EnvManager().queue_dir
   pending_dir = os.path.join(queue_root, "pending")
   os.makedirs(pending_dir, exist_ok=True)
 
@@ -70,7 +71,7 @@ def ensure_runner_running():
 
 def ensure_runner_running():
   """Runnerが動いていなければ裏で起動する"""
-  pid_file = os.path.join("queue", "runner.pid")
+  pid_file = os.path.join(EnvManager().queue_dir, "runner.pid")
   
   if os.path.exists(pid_file):
     # 既に動いているか確認（PIDが存在してもプロセスが死んでいる場合のケアは簡易的に省略）
@@ -88,7 +89,7 @@ def ensure_runner_running():
     
   subprocess.Popen(
     [sys.executable, "-m", "MLsystem.runner"],
-    cwd=os.getcwd(),
+    # cwd=os.getcwd(), # 廃止: EnvManager経由でパス解決するためカレントディレクトリに依存しない
     startupinfo=startupinfo,
     creationflags=creationflags,
     env=os.environ
@@ -96,7 +97,7 @@ def ensure_runner_running():
 
 def stop_runner():
   """実行中のRunnerを停止させる"""
-  pid_file = os.path.join("queue", "runner.pid")
+  pid_file = os.path.join(EnvManager().queue_dir, "runner.pid")
   if not os.path.exists(pid_file):
     print("Runner is not running.")
     return False

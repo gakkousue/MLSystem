@@ -13,7 +13,7 @@ from omegaconf import DictConfig, OmegaConf
 from MLsystem.registry import Registry
 from MLsystem.hashing import compute_combined_hash
 from MLsystem.inspector import find_config_class
-import common.config as common_conf_mod
+from MLsystem.utils.env_manager import EnvManager
 
 @dataclass
 class ExperimentContext:
@@ -99,7 +99,7 @@ class ExperimentBuilder:
                 "model_conf_cls": self.registry.get_config_class("models", cfg.model),
                 "adapter_conf_cls": self.registry.get_config_class("models", cfg.model, cfg.adapter),
                 "data_conf_cls": self.registry.get_config_class("datasets", cfg.dataset),
-                "common_conf_cls": find_config_class(common_conf_mod)
+                "common_conf_cls": find_config_class(EnvManager().get_common_config_module())
             }
         except Exception as e:
             raise RuntimeError(f"Failed to load definition modules: {e}")

@@ -11,6 +11,7 @@ from datetime import datetime
 
 from MLsystem.queue_manager import QueueManager
 from MLsystem.submit import ensure_runner_running, stop_runner
+from MLsystem.utils.env_manager import EnvManager
 
 class QueuePanel(ttk.Frame):
     def __init__(self, parent, app):
@@ -85,7 +86,7 @@ class QueuePanel(ttk.Frame):
         selected = self.tree.selection()
         saved_sel = selected[0] if selected else None
         
-        running_files = glob.glob("queue/running/*.json")
+        running_files = glob.glob(os.path.join(EnvManager().queue_dir, "running", "*.json"))
         pending_ids = self.qm.get_list()
         
         for item in self.tree.get_children():
@@ -98,7 +99,7 @@ class QueuePanel(ttk.Frame):
             except: pass
             
         for jid in pending_ids:
-            fpath = os.path.join("queue", "pending", f"job_{jid}.json")
+            fpath = os.path.join(EnvManager().queue_dir, "pending", f"job_{jid}.json")
             if os.path.exists(fpath):
                 try:
                     with open(fpath, "r") as f: data = json.load(f)
@@ -143,6 +144,6 @@ class QueuePanel(ttk.Frame):
             messagebox.showwarning("Warning", "Cannot delete running job. Stop runner first.")
             return
         self.qm.remove(jid)
-        fpath = os.path.join("queue", "pending", f"job_{jid}.json")
+        fpath = os.path.join(EnvManager().queue_dir, "pending", f"job_{jid}.json")
         if os.path.exists(fpath): os.remove(fpath)
         self.update_list()

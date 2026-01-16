@@ -11,8 +11,8 @@ from omegaconf import OmegaConf
 
 from MLsystem.registry import Registry
 from MLsystem.inspector import find_config_class
-import common.config as common_conf_mod
 from MLsystem.checkpoint_manager import CheckpointManager
+from MLsystem.utils.env_manager import EnvManager
 
 
 class ExperimentLoader:
@@ -21,7 +21,7 @@ class ExperimentLoader:
     """
     def __init__(self, hash_id):
         self.hash_id = hash_id
-        self.exp_dir = os.path.join("output", "experiments", hash_id)
+        self.exp_dir = os.path.join(EnvManager().output_dir, "experiments", hash_id)
         self.config_path = os.path.join(self.exp_dir, "config_diff.json")
         
         if not os.path.exists(self.config_path):
@@ -96,7 +96,7 @@ class ExperimentLoader:
         
         # 2. DataModule作成
         # diff_payloadから共通設定も復元する
-        import common.config as common_conf_mod
+        common_conf_mod = EnvManager().get_common_config_module()
         common_params = self._restore_params(common_conf_mod, self.diff_payload.get("common_diff", {}))
 
         # パラメータ結合ロジックを execute_train.py と統一 (Common < Dataset < Adapter < Model)

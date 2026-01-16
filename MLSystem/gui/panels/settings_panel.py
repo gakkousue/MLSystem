@@ -14,6 +14,7 @@ from MLsystem.hashing import compute_combined_hash
 from MLsystem.submit import add_job, ensure_runner_running
 from MLsystem.inspector import get_available_plots
 from MLsystem.registry import Registry
+from MLsystem.utils.env_manager import EnvManager
 
 class SettingsPanel(ttk.Frame):
     def __init__(self, parent, app):
@@ -150,7 +151,7 @@ class SettingsPanel(ttk.Frame):
 
         try:
             if kind == "common":
-                mod = importlib.import_module("common.config")
+                mod = EnvManager().get_common_config_module()
                 from MLsystem.inspector import find_config_class
                 target_cls = find_config_class(mod)
                 json_dir = "common"
@@ -189,7 +190,9 @@ class SettingsPanel(ttk.Frame):
         try:
             if json_dir:
                 if not os.path.isabs(json_dir):
-                    json_dir = os.path.join(os.getcwd(), json_dir)
+                    # プロジェクトルート基準（Registryの場所などから推定）
+                    base_dir = os.path.dirname(EnvManager().registry_path)
+                    json_dir = os.path.join(base_dir, json_dir)
                     
                 json_path = os.path.join(json_dir, "user_config.json")            
                 if os.path.exists(json_path):
@@ -429,6 +432,11 @@ class SettingsPanel(ttk.Frame):
         elif sub_kind: json_dir = os.path.join("definitions", kind, name, sub_kind, sub_name)
         else: json_dir = os.path.join("definitions", kind, name)
         
+        # 相対パスの場合はプロジェクトルート（Registry基準）を付加
+        if not os.path.isabs(json_dir):
+            base_dir = os.path.dirname(EnvManager().registry_path)
+            json_dir = os.path.join(base_dir, json_dir)
+        
         os.makedirs(json_dir, exist_ok=True)
         json_path = os.path.join(json_dir, "user_config.json")
         try:
@@ -462,7 +470,7 @@ class SettingsPanel(ttk.Frame):
         for k, v in a_p.items(): hydra_args.append(f"+adapter_params.{k}={v}")
         for k, v in d_p.items(): hydra_args.append(f"+data_params.{k}={v}")
         
-        exp_dir = os.path.join("output", "experiments", hid)
+        exp_dir = os.path.join(EnvManager().output_dir, "experiments", hid)
         os.makedirs(exp_dir, exist_ok=True)
         config_path = os.path.join(exp_dir, "config_diff.json")
         

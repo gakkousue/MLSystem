@@ -9,13 +9,15 @@ from dataclasses import is_dataclass
 
 
 from MLsystem.utils.config_base import BaseConfig
+from MLsystem.utils.env_manager import EnvManager
 
 class Registry:
-    def __init__(self, registry_path="configs/registry.json"):
-        # プロジェクトルートからの相対パスを解決するため、cwdを取得
-        self.cwd = os.getcwd()
-        self.registry_path = os.path.join(self.cwd, registry_path)
+    def __init__(self):
+        # 環境変数からパスを取得
+        self.registry_path = EnvManager().registry_path
         self.data = self._load()
+        # プロジェクトルート解決の基準パスとして、レジストリファイルのディレクトリを使用
+        self.registry_dir = os.path.dirname(self.registry_path)
 
     def _load(self):
         if not os.path.exists(self.registry_path):
@@ -29,7 +31,8 @@ class Registry:
         # project_root の解決
         proj_root = self.data.get("project_root", ".")
         if not os.path.isabs(proj_root):
-            proj_root = os.path.join(self.cwd, proj_root)
+            # プロジェクトルートが相対パスの場合、レジストリファイルの場所を基準にする
+            proj_root = os.path.join(self.registry_dir, proj_root)
         
         # base_dir の解決
         if not os.path.isabs(base_path):
@@ -82,7 +85,9 @@ class Registry:
             
                 # モジュール名を作成 (Pythonの標準インポート形式に合わせる)
         # 例: definitions/models/resnet/config.py -> definitions.models.resnet.config
-        proj_root = os.path.normpath(self.data.get("project_root", self.cwd))
+        proj_root = os.path.normpath(self.data.get("project_root", self.registry_dir))
+        if not os.path.isabs(proj_root):
+             proj_root = os.path.join(self.registry_dir, proj_root)
         rel_path = os.path.relpath(path, proj_root)
         module_name = os.path.splitext(rel_path)[0].replace(os.sep, ".")
         

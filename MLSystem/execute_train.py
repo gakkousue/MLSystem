@@ -13,6 +13,7 @@ from pytorch_lightning.callbacks import ModelCheckpoint
 
 
 from MLsystem.hashing import compute_combined_hash
+from MLsystem.utils.env_manager import EnvManager
 from MLsystem.registry import Registry
 from MLsystem.inspector import find_config_class  # common設定用に残す
 from MLsystem.builder import ExperimentBuilder
@@ -32,7 +33,7 @@ def main(cfg):
         print(f"Error building experiment: {e}")
         return
 
-    save_dir = os.path.join("output", "experiments", ctx.hash_id)
+    save_dir = os.path.join(EnvManager().output_dir, "experiments", ctx.hash_id)
     print(f"Experiment Hash ID: {ctx.hash_id}")
 
     # 実行済みチェックを行う場合はここで

@@ -12,9 +12,10 @@ import signal
 
 
 from MLsystem.queue_manager import QueueManager
+from MLsystem.utils.env_manager import EnvManager
 
 # PIDファイル（プロセスの名札）
-PID_FILE = os.path.join("queue", "runner.pid")
+PID_FILE = os.path.join(EnvManager().queue_dir, "runner.pid")
 
 def setup_dirs(root):
     dirs = {
@@ -31,7 +32,7 @@ def setup_dirs(root):
 class Runner:
     def __init__(self):
         self.current_process = None
-        self.queue_root = os.path.join(os.getcwd(), "queue")
+        self.queue_root = EnvManager().queue_dir
         self.dirs = setup_dirs(self.queue_root)
         self.running = True
         self.qm = QueueManager() # QueueManagerを初期化
