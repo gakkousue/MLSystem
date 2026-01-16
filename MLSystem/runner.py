@@ -157,8 +157,17 @@ class Runner:
         with open(dest, "r+") as f:
             data = json.load(f)
             data["status"] = status
-            data["duration"] = duration
+            data["started_at"] = start_time
+            data["started_at_str"] = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(start_time))
             data["finished_at"] = time.time()
+            data["finished_at_str"] = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(data["finished_at"]))
+            data["duration"] = duration
+            
+            # 人間が読みやすい形式の時間を追加
+            m, s = divmod(duration, 60)
+            h, m = divmod(m, 60)
+            data["duration_human"] = "{:d}:{:02d}:{:02d}".format(int(h), int(m), int(s))
+
             data["log_file"] = log_path
             if error_msg:
                 data["error_message"] = error_msg

@@ -549,7 +549,7 @@ class SettingsPanel(ttk.Frame):
                 return
 
         if mode == "train":
-            add_job(hydra_args, task_type="train")
+            add_job(hydra_args, task_type="train", hash_id=hid)
         else:
             display_label = self.selected_plot_class.get()
             if not display_label:
@@ -562,8 +562,7 @@ class SettingsPanel(ttk.Frame):
                 messagebox.showerror("Error", "Could not resolve plot class name.")
                 return
 
-            extra = {"hash_id": hid, "target_class": real_class_name}
-            add_job(hydra_args, task_type="plot", extra_data=extra)
+            add_job(hydra_args, task_type="plot", hash_id=hid, target_class=real_class_name)
 
         # アプリ全体に更新を通知
         self.app.on_job_submitted()

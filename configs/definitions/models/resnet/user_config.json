@@ -1,0 +1,6 @@
+{
+    "_name": "resnet",
+    "num_layers": 18,
+    "pretrained": false,
+    "lr": 0.001
+}

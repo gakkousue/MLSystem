@@ -1,5 +1,8 @@
+019
+jon.jsonの内容を変更
 018
 インデントの修正
+変数名の変更
 017
 MLSYSTEM_CONFIG環境変数による動的パス解決の実装 (EnvManager)
 設計書の更新 (Ver 4.1)
