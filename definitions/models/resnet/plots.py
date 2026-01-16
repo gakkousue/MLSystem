@@ -8,7 +8,7 @@ from sklearn.metrics import confusion_matrix
 import numpy as np
 
 # 親クラスのインポート
-from system.utils.base_plot import BasePlot
+from MLsystem.utils.base_plot import BasePlot
 
 class ConfusionMatrix(BasePlot):
     """

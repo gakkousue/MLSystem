@@ -4,12 +4,11 @@ import sys
 import os
 
 # 環境変数を設定し、sys.pathに必要なパスを追加
-import env_setup
-env_setup.add_to_sys_path()
 
-from gui.panels.settings_panel import SettingsPanel
-from gui.panels.queue_panel import QueuePanel
-from gui.panels.history_panel import HistoryPanel
+
+from MLsystem.gui.panels.settings_panel import SettingsPanel
+from MLsystem.gui.panels.queue_panel import QueuePanel
+from MLsystem.gui.panels.history_panel import HistoryPanel
 
 class ExperimentApp(tk.Tk):
     def __init__(self):

@@ -5,11 +5,10 @@ import json
 import traceback
 
 # 環境変数を設定し、sys.pathに必要なパスを追加
-import env_setup
-env_setup.add_to_sys_path()
 
-from loader import ExperimentLoader
-from inspector import get_available_plots
+
+from MLsystem.loader import ExperimentLoader
+from MLsystem.inspector import get_available_plots
 
 def main():
     if len(sys.argv) < 2:

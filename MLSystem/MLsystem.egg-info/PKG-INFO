@@ -1,0 +1,5 @@
+Metadata-Version: 2.4
+Name: MLsystem
+Version: 0.1.0
+Requires-Dist: pytorch-lightning
+Requires-Dist: hydra-core

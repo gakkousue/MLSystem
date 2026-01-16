@@ -7,12 +7,12 @@ import importlib.util
 from omegaconf import OmegaConf
 
 # 環境変数を設定し、sys.pathに必要なパスを追加
-import env_setup
-env_setup.add_to_sys_path()
 
-from registry import Registry
-from checkpoint_manager import CheckpointManager
-from checkpoint_manager import CheckpointManager
+
+from MLsystem.registry import Registry
+from MLsystem.inspector import find_config_class
+import common.config as common_conf_mod
+from MLsystem.checkpoint_manager import CheckpointManager
 
 
 class ExperimentLoader:

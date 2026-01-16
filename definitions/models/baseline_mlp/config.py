@@ -1,6 +1,6 @@
 # definitions/models/baseline_mlp/config.py
 from dataclasses import dataclass
-from system.utils.config_base import BaseConfig, conf_field
+from MLsystem.utils.config_base import BaseConfig, conf_field
 
 @dataclass
 class ModelConfig(BaseConfig):

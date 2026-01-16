@@ -8,12 +8,11 @@ import pytorch_lightning as pl
 from omegaconf import DictConfig, OmegaConf
 
 # 環境変数を設定し、sys.pathに必要なパスを追加
-import env_setup
-env_setup.add_to_sys_path()
 
-from registry import Registry
-from hashing import compute_combined_hash
-from inspector import find_config_class
+
+from MLsystem.registry import Registry
+from MLsystem.hashing import compute_combined_hash
+from MLsystem.inspector import find_config_class
 import common.config as common_conf_mod
 
 @dataclass

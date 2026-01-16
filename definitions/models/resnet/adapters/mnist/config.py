@@ -2,7 +2,7 @@
 # ResNet用 MNISTアダプター設定
 
 from dataclasses import dataclass
-from system.utils.config_base import BaseConfig, conf_field
+from MLsystem.utils.config_base import BaseConfig, conf_field
 
 @dataclass
 class AdapterConfig(BaseConfig):

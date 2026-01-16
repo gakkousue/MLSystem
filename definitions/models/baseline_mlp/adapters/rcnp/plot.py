@@ -1,5 +1,5 @@
 # definitions/models/baseline_mlp/adapters/rcnp/plot.py
-from system.utils.base_plot import BasePlot
+from MLsystem.utils.base_plot import BasePlot
 
 class NoPlot(BasePlot):
     name = "No Plot Available"

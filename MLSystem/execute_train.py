@@ -10,15 +10,14 @@ import pytorch_lightning as pl
 from pytorch_lightning.callbacks import ModelCheckpoint
 
 # 環境変数を設定し、sys.pathに必要なパスを追加
-import env_setup
-env_setup.add_to_sys_path()
 
-from hashing import compute_combined_hash
-from registry import Registry
-from inspector import find_config_class  # common設定用に残す
-from builder import ExperimentBuilder
-from checkpoint_manager import CheckpointManager
-from callbacks import JobLoggingCallback  # 追加
+
+from MLsystem.hashing import compute_combined_hash
+from MLsystem.registry import Registry
+from MLsystem.inspector import find_config_class  # common設定用に残す
+from MLsystem.builder import ExperimentBuilder
+from MLsystem.checkpoint_manager import CheckpointManager
+from MLsystem.callbacks import JobLoggingCallback  # 追加
 
 @hydra.main(config_path="../configs", config_name="config", version_base=None)
 def main(cfg):

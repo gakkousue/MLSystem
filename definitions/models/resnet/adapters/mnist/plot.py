@@ -2,7 +2,7 @@
 import os
 import matplotlib.pyplot as plt
 import torchvision
-from system.utils.base_plot import BasePlot
+from MLsystem.utils.base_plot import BasePlot
 
 class AdapterTransformedSamples(BasePlot):
     """

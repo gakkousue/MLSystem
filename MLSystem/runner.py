@@ -9,10 +9,9 @@ import glob
 import signal
 
 # 環境変数を設定し、sys.pathに必要なパスを追加
-import env_setup
-env_setup.add_to_sys_path()
 
-from queue_manager import QueueManager
+
+from MLsystem.queue_manager import QueueManager
 
 # PIDファイル（プロセスの名札）
 PID_FILE = os.path.join("queue", "runner.pid")
@@ -115,13 +114,10 @@ class Runner:
         # 実行コマンドの分岐
         if task_type == "plot":
             # execute_plot.py をサブプロセスとして実行
-            # 引数としてジョブファイルのパスを渡す
-            script_path = os.path.join("system", "execute_plot.py")
-            # ファイルはすでに running ディレクトリに移動されているため、running_path を渡す
-            cmd = [sys.executable, script_path, running_path]
+            cmd = [sys.executable, "-m", "MLsystem.execute_plot", running_path]
         else:
             # 通常の学習 (execute_train.py)
-            cmd = [sys.executable, "system/execute_train.py"] + job_data["args"]
+            cmd = [sys.executable, "-m", "MLsystem.execute_train"] + job_data["args"]
         
         start_time = time.time()
         

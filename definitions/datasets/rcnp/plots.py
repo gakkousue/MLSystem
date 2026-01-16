@@ -1,5 +1,5 @@
 # definitions/datasets/rcnp/plots.py
-from system.utils.base_plot import BasePlot
+from MLsystem.utils.base_plot import BasePlot
 
 class DatasetInfo(BasePlot):
     name = "Dataset Info"

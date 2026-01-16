@@ -11,7 +11,7 @@ if 'MLSYSTEM_SYSTEM_PATH' in os.environ:
   if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
-from system.utils.config_base import BaseConfig, conf_field
+from MLsystem.utils.config_base import BaseConfig, conf_field
 
 @dataclass
 class CommonConfig(BaseConfig):

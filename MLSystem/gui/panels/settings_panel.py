@@ -8,13 +8,12 @@ import inspect
 from dataclasses import fields, is_dataclass
 
 # 環境変数を設定し、sys.pathに必要なパスを追加
-import env_setup
-env_setup.add_to_sys_path()
 
-from hashing import compute_combined_hash
-from submit import add_job, ensure_runner_running
-from inspector import get_available_plots
-from registry import Registry
+
+from MLsystem.hashing import compute_combined_hash
+from MLsystem.submit import add_job, ensure_runner_running
+from MLsystem.inspector import get_available_plots
+from MLsystem.registry import Registry
 
 class SettingsPanel(ttk.Frame):
     def __init__(self, parent, app):
@@ -152,7 +151,7 @@ class SettingsPanel(ttk.Frame):
         try:
             if kind == "common":
                 mod = importlib.import_module("common.config")
-                from system.inspector import find_config_class
+                from MLsystem.inspector import find_config_class
                 target_cls = find_config_class(mod)
                 json_dir = "common"
             else:

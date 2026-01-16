@@ -1,4 +1,5 @@
-016
+016.1
+pip install -e ./MLSystem(pip install -e .)
 pathの修正
 015
 modelのログ出力とhparamersの修正

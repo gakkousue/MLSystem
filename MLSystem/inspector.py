@@ -5,12 +5,11 @@ import importlib.util
 from dataclasses import is_dataclass
 
 # 環境変数を設定し、sys.pathに必要なパスを追加
-import env_setup
-env_setup.add_to_sys_path()
 
-from utils.base_plot import BasePlot
-from registry import Registry
-from utils.config_base import BaseConfig
+
+from MLsystem.utils.base_plot import BasePlot
+from MLsystem.registry import Registry
+from MLsystem.utils.config_base import BaseConfig
 
 def get_available_plots(model_name, adapter_name=None, dataset_name=None):
     """

@@ -7,11 +7,10 @@ import glob
 from datetime import datetime
 
 # 環境変数を設定し、sys.pathに必要なパスを追加
-import env_setup
-env_setup.add_to_sys_path()
 
-from queue_manager import QueueManager
-from submit import ensure_runner_running, stop_runner
+
+from MLsystem.queue_manager import QueueManager
+from MLsystem.submit import ensure_runner_running, stop_runner
 
 class QueuePanel(ttk.Frame):
     def __init__(self, parent, app):

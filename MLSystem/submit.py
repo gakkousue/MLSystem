@@ -8,10 +8,9 @@ import subprocess
 import signal
 
 # 環境変数を設定し、sys.pathに必要なパスを追加
-import env_setup
-env_setup.add_to_sys_path()
 
-from queue_manager import QueueManager
+
+from MLsystem.queue_manager import QueueManager
 
 # 外部から呼び出し可能な関数にする
 def add_job(args, task_type="train", condition=None, extra_data=None):
@@ -88,7 +87,7 @@ def ensure_runner_running():
     creationflags = subprocess.CREATE_NO_WINDOW
     
   subprocess.Popen(
-    [sys.executable, "system/runner.py"],
+    [sys.executable, "-m", "MLsystem.runner"],
     cwd=os.getcwd(),
     startupinfo=startupinfo,
     creationflags=creationflags,
@@ -127,7 +126,7 @@ def stop_runner():
 if __name__ == "__main__":
   args = sys.argv[1:]
   if not args:
-    print("Usage: python system/submit.py [hydra arguments...]")
+    print("Usage: python -m MLsystem.submit [hydra arguments...]")
   else:
     add_job(args)
     # CLIからの実行時は追加してすぐに実行開始する
