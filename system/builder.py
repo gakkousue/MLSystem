@@ -1,14 +1,19 @@
 # system/builder.py
 import os
+import sys
 from dataclasses import dataclass
 from typing import Any, Dict, Optional
 
 import pytorch_lightning as pl
 from omegaconf import DictConfig, OmegaConf
 
-from system.registry import Registry
-from system.hashing import compute_combined_hash
-from system.inspector import find_config_class
+# 環境変数を設定し、sys.pathに必要なパスを追加
+import env_setup
+env_setup.add_to_sys_path()
+
+from registry import Registry
+from hashing import compute_combined_hash
+from inspector import find_config_class
 import common.config as common_conf_mod
 
 @dataclass

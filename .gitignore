@@ -4,3 +4,5 @@ data/
 output/
 outputs/
 queue/
+
+.agent/

@@ -7,6 +7,11 @@ import subprocess
 import shutil
 import glob
 import signal
+
+# 環境変数を設定し、sys.pathに必要なパスを追加
+import env_setup
+env_setup.add_to_sys_path()
+
 from queue_manager import QueueManager
 
 # PIDファイル（プロセスの名札）
@@ -126,12 +131,18 @@ class Runner:
 
         # ログファイルを開いて、標準出力・標準エラー出力を書き込む
         with open(log_path, "w", encoding="utf-8") as log_file:
-            # プロセスを保持しておく（停止時に道連れにするため）
-            # stdout, stderrをログファイルにリダイレクト
-            self.current_process = subprocess.Popen(cmd, stdout=log_file, stderr=subprocess.STDOUT)
-            
-            # 終了待ち
-            return_code = self.current_process.wait()
+          # プロセスを保持しておく（停止時に道連れにするため）
+          # stdout, stderrをログファイルにリダイレクト
+          # env=os.environで環境変数を子プロセスに引き継ぐ
+          self.current_process = subprocess.Popen(
+            cmd, 
+            stdout=log_file, 
+            stderr=subprocess.STDOUT,
+            env=os.environ
+          )
+          
+          # 終了待ち
+          return_code = self.current_process.wait()
         
         duration = time.time() - start_time
         self.current_process = None # 終わったらクリア

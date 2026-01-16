@@ -1,7 +1,16 @@
 # system/inspector.py
+import sys
 import inspect
-from system.utils.base_plot import BasePlot
-from system.registry import Registry
+import importlib.util
+from dataclasses import is_dataclass
+
+# 環境変数を設定し、sys.pathに必要なパスを追加
+import env_setup
+env_setup.add_to_sys_path()
+
+from utils.base_plot import BasePlot
+from registry import Registry
+from utils.config_base import BaseConfig
 
 def get_available_plots(model_name, adapter_name=None, dataset_name=None):
     """
@@ -51,8 +60,6 @@ def find_config_class(module):
     """
     モジュール内から dataclass で定義された Config クラスを探して返す。
     """
-    from dataclasses import is_dataclass
-    from system.utils.config_base import BaseConfig
 
     candidates = []
     for name, obj in inspect.getmembers(module):
@@ -75,8 +82,6 @@ def find_config_class(module):
     system.utils.config_base.BaseConfig を継承しているものを優先するが、
     なければ単なる dataclass を探す。
     """
-    from dataclasses import is_dataclass
-    from system.utils.config_base import BaseConfig
 
     candidates = []
     for name, obj in inspect.getmembers(module):

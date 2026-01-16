@@ -1,14 +1,20 @@
+import sys
+import os
 import tkinter as tk
 from tkinter import ttk, messagebox
-import os
 import json
 import importlib
 import inspect
 from dataclasses import fields, is_dataclass
-from system.hashing import compute_combined_hash
-from system.submit import add_job
-from system.inspector import get_available_plots
-from system.registry import Registry
+
+# 環境変数を設定し、sys.pathに必要なパスを追加
+import env_setup
+env_setup.add_to_sys_path()
+
+from hashing import compute_combined_hash
+from submit import add_job, ensure_runner_running
+from inspector import get_available_plots
+from registry import Registry
 
 class SettingsPanel(ttk.Frame):
     def __init__(self, parent, app):

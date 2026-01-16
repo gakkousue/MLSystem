@@ -1,12 +1,19 @@
 # system/loader.py
 import os
+import sys
 import json
 import torch
-import importlib
-import glob
-import re
+import importlib.util
 from omegaconf import OmegaConf
-from system.registry import Registry
+
+# 環境変数を設定し、sys.pathに必要なパスを追加
+import env_setup
+env_setup.add_to_sys_path()
+
+from registry import Registry
+from checkpoint_manager import CheckpointManager
+from checkpoint_manager import CheckpointManager
+
 
 class ExperimentLoader:
     """
@@ -131,7 +138,6 @@ class ExperimentLoader:
         """
         利用可能なチェックポイントの一覧を取得する。
         """
-        from system.checkpoint_manager import CheckpointManager
         manager = CheckpointManager(self.exp_dir)
         return manager.list_checkpoints()
 
@@ -140,6 +146,5 @@ class ExperimentLoader:
         指定エポックのCKPTパスを返す。
         epoch=Noneの場合は 'last.ckpt' または 最もエポック数が大きいものを返す。
         """
-        from system.checkpoint_manager import CheckpointManager
         manager = CheckpointManager(self.exp_dir)
         return manager.get_path(epoch)

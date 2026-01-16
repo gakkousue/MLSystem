@@ -4,7 +4,12 @@ import sys
 import importlib.util
 import inspect
 from dataclasses import is_dataclass
-from system.utils.config_base import BaseConfig
+
+# 環境変数を設定し、sys.pathに必要なパスを追加
+import env_setup
+env_setup.add_to_sys_path()
+
+from utils.config_base import BaseConfig
 
 class Registry:
     def __init__(self, registry_path="configs/registry.json"):

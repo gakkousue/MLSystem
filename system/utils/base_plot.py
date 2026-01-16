@@ -56,7 +56,8 @@ class BasePlot:
         # 実行
         try:
             # cwdはプロジェクトルートを想定
-            ret = subprocess.run(cmd, cwd=os.getcwd())
+            # env=os.environで環境変数を子プロセスに引き継ぐ
+            ret = subprocess.run(cmd, cwd=os.getcwd(), env=os.environ)
             
             if ret.returncode != 0:
                 raise RuntimeError(f"Training failed with return code {ret.returncode}")

@@ -4,11 +4,12 @@ import os
 import json
 import traceback
 
-# プロジェクトルートにパスを通す
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+# 環境変数を設定し、sys.pathに必要なパスを追加
+import env_setup
+env_setup.add_to_sys_path()
 
-from system.loader import ExperimentLoader
-from system.inspector import get_available_plots
+from loader import ExperimentLoader
+from inspector import get_available_plots
 
 def main():
     if len(sys.argv) < 2:

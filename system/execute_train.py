@@ -1,22 +1,24 @@
 # system/execute_train.py
 import os
 import sys
-
-# プロジェクトルートにパスを通す
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-
 import json
 import importlib
-import torch # 追加
+import torch  # 追加
 import hydra
 from omegaconf import OmegaConf
 import pytorch_lightning as pl
-from system.hashing import compute_combined_hash
-from system.registry import Registry
-from system.inspector import find_config_class # common設定用に残す
-import pytorch_lightning as pl
 from pytorch_lightning.callbacks import ModelCheckpoint
-from system.builder import ExperimentBuilder
+
+# 環境変数を設定し、sys.pathに必要なパスを追加
+import env_setup
+env_setup.add_to_sys_path()
+
+from hashing import compute_combined_hash
+from registry import Registry
+from inspector import find_config_class  # common設定用に残す
+from builder import ExperimentBuilder
+from checkpoint_manager import CheckpointManager
+from callbacks import JobLoggingCallback  # 追加
 
 @hydra.main(config_path="../configs", config_name="config", version_base=None)
 def main(cfg):
@@ -50,8 +52,6 @@ def main(cfg):
         version="" 
     )
 
-    from system.checkpoint_manager import CheckpointManager
-    from system.callbacks import JobLoggingCallback # 追加
 
     ckpt_manager = CheckpointManager(save_dir)
     

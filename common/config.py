@@ -1,7 +1,16 @@
 # common/config.py
 # 全モデル共通の設定 (max_epochs, batch_size等)
 
+import os
+import sys
 from dataclasses import dataclass
+
+# 環境変数からプロジェクトルートを取得してsys.pathに追加
+if 'MLSYSTEM_SYSTEM_PATH' in os.environ:
+  project_root = os.path.dirname(os.environ['MLSYSTEM_SYSTEM_PATH'])
+  if project_root not in sys.path:
+    sys.path.insert(0, project_root)
+
 from system.utils.config_base import BaseConfig, conf_field
 
 @dataclass

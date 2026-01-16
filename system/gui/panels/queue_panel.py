@@ -1,11 +1,17 @@
 import tkinter as tk
 from tkinter import ttk, messagebox
-import os
 import json
+import os
+import sys
 import glob
 from datetime import datetime
-from system.submit import stop_runner, ensure_runner_running
-from system.queue_manager import QueueManager
+
+# 環境変数を設定し、sys.pathに必要なパスを追加
+import env_setup
+env_setup.add_to_sys_path()
+
+from queue_manager import QueueManager
+from submit import ensure_runner_running, stop_runner
 
 class QueuePanel(ttk.Frame):
     def __init__(self, parent, app):
