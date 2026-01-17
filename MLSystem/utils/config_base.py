@@ -4,7 +4,12 @@ from typing import Any
 
 
 def conf_field(
-    default: Any, desc: str = "", ui_mode: str = "input", ignore: bool = False, **kwargs
+    default: Any,
+    desc: str = "",
+    ui_mode: str = "input",
+    ignore: bool = False,
+    excludes: list[str] = None,
+    **kwargs,
 ):
     """
     GUI用メタデータを含むdataclassフィールドを生成するヘルパー関数
@@ -14,11 +19,13 @@ def conf_field(
       desc: 設定の説明文
       ui_mode: "input"(通常), "readonly"(読取専用), "hidden"(非表示)
       ignore: Trueの場合、ハッシュ計算（実験ID）の算出元から除外する
+      excludes: Hash計算時に、このフィールド（辞書型想定）の値から除外したいキーのリスト
     """
     metadata = {
         "desc": desc,
         "ui_mode": ui_mode,
         "ignore": ignore,
+        "excludes": excludes,
     }
     metadata.update(kwargs)
     return field(default=default, metadata=metadata)

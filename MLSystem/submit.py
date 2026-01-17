@@ -12,7 +12,7 @@ from MLsystem.utils.env_manager import EnvManager
 
 
 # 外部から呼び出し可能な関数にする
-def add_job(args, task_type="train", hash_id=None, target_class=None):
+def add_job(args, task_type="train", hash_id=None, target_class=None, target_member=None):
     """
     ジョブをJSONとして保存し、QueueManagerに登録する。
 
@@ -20,6 +20,7 @@ def add_job(args, task_type="train", hash_id=None, target_class=None):
     task_type: "train" または "plot"
     hash_id: 実験設定のハッシュID (required)
     target_class: Plotタスクの場合の対象クラス名 (optional)
+    target_member: Plotタスクの対象メンバ (NoneならMainモデル)
     """
     queue_root = EnvManager().queue_dir
     pending_dir = os.path.join(queue_root, "pending")
@@ -46,6 +47,9 @@ def add_job(args, task_type="train", hash_id=None, target_class=None):
 
     if target_class:
         job_data["target_class"] = target_class
+    
+    if target_member:
+        job_data["target_member"] = target_member
 
     # JSONファイルとして詳細情報を保存
     with open(job_file, "w") as f:

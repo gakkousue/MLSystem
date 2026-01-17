@@ -40,17 +40,31 @@ def compute_combined_hash(
             if f.metadata.get("ignore", False):
                 continue
 
-            # 内部管理用フィールド(_nameなど)も除外したければここで判定
-            # ただし _name は ignore=True になっていなくても値が変わらないはずなので問題ない
-
             default = f.default
             val = params.get(f.name, default)
 
+            # excludes処理: 特定のキーをハッシュ計算から除外
+            excludes = f.metadata.get("excludes")
+            if excludes and isinstance(val, dict):
+                # 元のdictを破壊しないようコピー
+                val = copy.deepcopy(val)
+                for ex_key in excludes:
+                    if ex_key in val:
+                        del val[ex_key]
+            
             # デフォルト値と異なる場合のみ記録
-            # 型が違う場合(int vs float)の比較には注意が必要だが、
-            # 基本的にGUI/CLIからの入力値とデフォルト値の比較を行う
+            # 注意: excludes適用後の値をデフォルトと比較するのは難しい（デフォルト値にもexcludes適用が必要？）
+            # ここでは「excludes適用後のval」をハッシュ計算に使う。
+            # default判定は「元の値」で行うべきか、「適用後の値」で行うべきか。
+            # 通常、default値自体もハッシュに影響しない（省略時と同じ）ため、
+            # val != default のチェックは「入力された値がデフォルトと違うか」を見るもの。
+            # excludesは「その値の中身の一部を無視する」もの。
+            # シンプルに、「値が存在すれば(デフォルトと違えば)登録し、その中身を加工する」のが安全。
+            
             if val != default:
-                target_dict[f.name] = val
+                 # さらに、valが辞書の場合、除外後の辞書が空になったら記録すべきか？
+                 # 空になっても「空の辞書を設定した」という意味があるなら記録すべき。
+                 target_dict[f.name] = val
 
     # 各カテゴリの差分抽出
     process_params(common_cls, common_params, payload["common_diff"])

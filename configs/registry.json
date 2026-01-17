@@ -1,53 +1,53 @@
 {
-    "project_root": "C:/Users/soush/研究室/MLSystem",
-    "models": {
-        "resnet": {
-            "base_dir": "definitions/models/resnet",
-            "config_file": "config.py",
-            "main_file": "model.py",
-            "plot_file": "plots.py",
-            "adapters": {
-                "mnist": {
-                    "base_dir": "adapters/mnist",
-                    "config_file": "config.py",
-                    "main_file": "adapter.py",
-                    "plot_file": "plot.py"
-                },
-                "rcnp": {
-                    "base_dir": "adapters/rcnp",
-                    "config_file": "config.py",
-                    "main_file": "adapter.py",
-                    "plot_file": "plot.py"
-                }
-            }
-        },
-        "baseline_mlp": {
-            "base_dir": "definitions/models/baseline_mlp",
-            "config_file": "config.py",
-            "main_file": "model.py",
-            "plot_file": "plots.py",
-            "adapters": {
-                "rcnp": {
-                    "base_dir": "adapters/rcnp",
-                    "config_file": "config.py",
-                    "main_file": "adapter.py",
-                    "plot_file": "plot.py"
-                }
-            }
-        }
-    },
-    "datasets": {
+  "project_root": "C:/Users/soush/研究室/MLSystem",
+  "models": {
+    "resnet": {
+      "base_dir": "definitions/models/resnet",
+      "config_file": "config.py",
+      "main_file": "model.py",
+      "plot_file": "plots.py",
+      "adapters": {
         "mnist": {
-            "base_dir": "definitions/datasets/mnist",
-            "config_file": "config.py",
-            "main_file": "datamodule.py",
-            "plot_file": "plots.py"
+          "base_dir": "adapters/mnist",
+          "config_file": "config.py",
+          "main_file": "adapter.py",
+          "plot_file": "plot.py"
         },
         "rcnp": {
-            "base_dir": "definitions/datasets/rcnp",
-            "config_file": "config.py",
-            "main_file": "datamodule.py",
-            "plot_file": "plots.py"
+          "base_dir": "adapters/rcnp",
+          "config_file": "config.py",
+          "main_file": "adapter.py",
+          "plot_file": "plot.py"
         }
+      }
+    },
+    "baseline_mlp": {
+      "base_dir": "definitions/models/baseline_mlp",
+      "config_file": "config.py",
+      "main_file": "model.py",
+      "plot_file": "plots.py",
+      "adapters": {
+        "rcnp": {
+          "base_dir": "adapters/rcnp",
+          "config_file": "config.py",
+          "main_file": "adapter.py",
+          "plot_file": "plot.py"
+        }
+      }
     }
+  },
+  "datasets": {
+    "mnist": {
+      "base_dir": "definitions/datasets/mnist",
+      "config_file": "config.py",
+      "main_file": "datamodule.py",
+      "plot_file": "plots.py"
+    },
+    "rcnp": {
+      "base_dir": "definitions/datasets/rcnp",
+      "config_file": "config.py",
+      "main_file": "datamodule.py",
+      "plot_file": "plots.py"
+    }
+  }
 }

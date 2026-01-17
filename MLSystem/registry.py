@@ -44,31 +44,101 @@ class Registry:
         info = self.data.get("models", {}).get(model_name)
         if not info:
             raise ValueError(f"Model '{model_name}' not found in registry.")
+
+        # 継承 (parent) の処理
+        parent_name = info.get("parent")
+        if parent_name:
+            # 親の情報を再帰的に取得
+            parent_info = self.get_model_info(parent_name)
+            
+            # ディープコピーに近い形でマージのベースを作成
+            import copy
+            merged = copy.deepcopy(parent_info)
+
+            # 親のパス系キー (suffixが _file) は、親のbase_dir基準で絶対パス化しておく
+            for k, v in merged.items():
+                if k.endswith("_file") and isinstance(v, str):
+                    if not os.path.isabs(v):
+                        merged[k] = self._resolve_path(merged.get("base_dir", ""), v)
+            
+            # 親の Adapters も同様に base_dir を絶対パス化しておく
+            if "adapters" in merged:
+                parent_base = merged.get("base_dir", "")
+                # 親情報自体で base_dir が絶対パス化されていない場合（親がトップレベル定義の場合など）
+                # ここで絶対パス化しておかないと、子に引き継いだ時にパスが解決できなくなる。
+                # ただし parent_base が相対パスの場合、それを絶対パスにするには project_root が必要。
+                # _resolve_path(parent_base, ".") で絶対パス化できる。
+                
+                abs_parent_base = self._resolve_path(parent_base, ".")
+                
+                for ad_name, ad_info in merged["adapters"].items():
+                    ad_base = ad_info.get("base_dir", "")
+                    if not os.path.isabs(ad_base):
+                        # Modelのbase_dir（絶対パス化済み）と結合
+                        # 親のAdapter定義は、親のbase_dirからの相対パス
+                        ad_info["base_dir"] = os.path.join(abs_parent_base, ad_base)
+
+            # 親情報の base_dir を絶対パス化 (子での利用に備えて)
+            if "base_dir" in merged:
+                merged["base_dir"] = self._resolve_path(merged["base_dir"], ".")
+
+            # 子の情報で上書き（マージ）
+            child_adapters = info.get("adapters", {})
+            child_components = info.get("components", {})
+            
+            # ベースのadaptersに子のadaptersをマージ
+            if "adapters" not in merged:
+                merged["adapters"] = {}
+            merged["adapters"].update(child_adapters)
+            
+            # componentsのマージ
+            if "components" not in merged:
+                merged["components"] = {}
+            merged["components"].update(child_components)
+
+            # その他のフィールドを上書き
+            for k, v in info.items():
+                if k not in ["adapters", "components"]:
+                    merged[k] = v
+            
+            info = merged
+
         return info
 
     def get_dataset_info(self, dataset_name):
         info = self.data.get("datasets", {}).get(dataset_name)
         if not info:
             raise ValueError(f"Dataset '{dataset_name}' not found in registry.")
+        
+        # Datasetも継承できるようにする場合ここにも同様のロジックが必要だが、
+        # 今回の要件は主にModelの継承/包含と思われるため、Model優先で実装。
+        # 必要なら追加する。
         return info
 
     def get_adapter_info(self, model_name, adapter_name):
         model_info = self.get_model_info(model_name)
         adapters = model_info.get("adapters", {})
         info = adapters.get(adapter_name)
+        
         if not info:
-            raise ValueError(
+             raise ValueError(
                 f"Adapter '{adapter_name}' not found in model '{model_name}'."
             )
 
-        # Adapterのbase_dirはModelのbase_dirからの相対パスとして扱う仕様
-        # しかしJSON上ではパス文字列として結合する必要がある
+        # Adapterのbase_dir処理
         model_base = model_info.get("base_dir", "")
         adapter_base = info.get("base_dir", "")
-
-        # 情報をコピーしてbase_dirを結合済みのものに書き換えて返す
+        
         merged_info = info.copy()
-        merged_info["base_dir"] = os.path.join(model_base, adapter_base)
+        
+        # adapter_base が絶対パスならそのまま (親情報の継承で変換済み、または元から絶対パス)
+        if os.path.isabs(adapter_base):
+            merged_info["base_dir"] = adapter_base
+        else:
+            # 相対パスなら結合
+            # model_base が絶対パスなら join で絶対パス、相対なら相対になる
+            merged_info["base_dir"] = os.path.join(model_base, adapter_base)
+        
         return merged_info
 
     def load_module_from_info(self, info, file_key):
@@ -78,7 +148,11 @@ class Registry:
         if not filename:
             raise ValueError(f"Key '{file_key}' not defined in registry info.")
 
-        path = self._resolve_path(base_dir, filename)
+        # filename が絶対パスならそれを採用、そうでなければ解決
+        if os.path.isabs(filename):
+            path = filename
+        else:
+            path = self._resolve_path(base_dir, filename)
 
         if not os.path.exists(path):
             raise FileNotFoundError(f"Module file not found: {path}")

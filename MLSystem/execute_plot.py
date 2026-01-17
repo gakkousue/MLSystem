@@ -27,6 +27,7 @@ def main():
 
     hash_id = job_data.get("hash_id")
     target_class_name = job_data.get("target_class")
+    target_member = job_data.get("target_member") # Optional
     job_args = job_data.get("args", [])
 
     if not hash_id:
@@ -41,32 +42,59 @@ def main():
         # 2. 実験環境の復元
         print(f">> Loading Experiment: {hash_id}")
         loader = ExperimentLoader(hash_id)
+        
+        # モデル構築（必須）
+        loader.setup()
 
         # 3. Plotクラスの検索
-        available_plots = get_available_plots(
+        # 戻り値: [{"class": Cls, "target": ..., "label": ...}]
+        available_plots_items = get_available_plots(
             loader.model_name, loader.adapter_name, loader.dataset_name
         )
 
         target_cls = None
-        for cls in available_plots:
+        for item in available_plots_items:
+            cls = item["class"]
             if cls.__name__ == target_class_name:
+                # クラス名だけで判定して良いか？
+                # 同じクラス名が別コンポーネントで使われている可能性があるが、
+                # execute_plot時点では「どのコンポーネント用のPlotか」は target_member で決まる。
+                # ただし、target_member が一致するものを選ぶべきか？
+                # GUI側では (Label) -> (Class, Target) と一意に決めている。
+                # ここでは Class と Target の両方が一致するものを探すべきだが、
+                # 実は Plotクラス自体はコンポーネントに依存せず定義されていることが多い。
+                # 単にクラスが見つかればOKとし、Targetの適用は後述のロジックで行う。
                 target_cls = cls
                 break
 
         if not target_cls:
             print(
-                f"Error: Plot class '{target_class_name}' not found for model '{model_name}'."
+                f"Error: Plot class '{target_class_name}' not found for model '{loader.model_name}'."
             )
-            print(f"Available plots: {[c.__name__ for c in available_plots]}")
+            print(f"Available plots: {[item['class'].__name__ for item in available_plots_items]}")
             sys.exit(1)
 
         # 4. 実行
-        print(f">> Executing Plot: {target_class_name}")
+        print(f">> Executing Plot: {target_class_name} (Target: {target_member})")
 
         # インスタンス化 (loaderと学習用引数を渡す)
         plot_instance = target_cls(loader, job_args)
+        
+        # ターゲットモデルの注入
+        if target_member:
+            # Mainモデルからメンバを辿る
+            # 例: target_member="backbone" -> loader.model.backbone
+            if not hasattr(loader.model, target_member):
+                 print(f"Error: Target member '{target_member}' not found in loaded model.")
+                 sys.exit(1)
+            
+            sub_model = getattr(loader.model, target_member)
+            plot_instance.target_model = sub_model
+        else:
+            # 指定がなければMainモデルそのもの（またはNoneのまま BasePlot側で判断）
+            plot_instance.target_model = loader.model
 
-        # 実行 (必要なら内部で学習が走る)
+        # 実行 (必要なら内部で学習が走る -> 今後は廃止されエラーになる)
         plot_instance.run()
 
         print(">> Plot Execution Finished Successfully.")

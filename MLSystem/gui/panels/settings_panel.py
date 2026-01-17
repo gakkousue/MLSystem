@@ -393,25 +393,17 @@ class SettingsPanel(ttk.Frame):
             return
 
         try:
+            # 戻り値: [{"class": PlotClass, "target": ..., "label": ...}, ...]
             plots = get_available_plots(m, a, d)
             display_values = []
 
-            for p in plots:
-                # 定義元モジュールパスからカテゴリを判定
-                mod = p.__module__
-                if "datasets" in mod:
-                    cat = "Dataset"
-                elif "adapters" in mod:
-                    cat = "Adapter"
-                else:
-                    cat = "Model"
+            for item in plots:
+                label = item["label"]
+                cls_name = item["class"].__name__
+                target = item["target"]
 
-                # クラス変数 name があればそれを使い、なければクラス名を使う
-                p_name = getattr(p, "name", p.__name__)
-                label = f"[{cat}] {p_name}"
-
-                # マッピング保存 (表示名 -> クラス名)
-                self.plot_map[label] = p.__name__
+                # マッピング保存 (表示名 -> {class: クラス名, target: ターゲットメンバ名})
+                self.plot_map[label] = {"class": cls_name, "target": target}
                 display_values.append(label)
 
             self.plot_combo["values"] = display_values
@@ -556,13 +548,17 @@ class SettingsPanel(ttk.Frame):
                 messagebox.showwarning("Warning", "Please select a plot class.")
                 return
 
-            # マッピングから正式なクラス名を取得
-            real_class_name = self.plot_map.get(display_label)
-            if not real_class_name:
-                messagebox.showerror("Error", "Could not resolve plot class name.")
+            # マッピングから情報を取得
+            plot_info = self.plot_map.get(display_label)
+            if not plot_info:
+                messagebox.showerror("Error", "Could not resolve plot class info.")
                 return
+            
+            # plot_info は {"class": cls_name, "target": target_member}
+            real_class_name = plot_info["class"]
+            target_member = plot_info["target"]
 
-            add_job(hydra_args, task_type="plot", hash_id=hid, target_class=real_class_name)
+            add_job(hydra_args, task_type="plot", hash_id=hid, target_class=real_class_name, target_member=target_member)
 
         # アプリ全体に更新を通知
         self.app.on_job_submitted()
