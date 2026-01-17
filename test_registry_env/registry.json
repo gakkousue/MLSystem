@@ -1,1 +1,0 @@
-{"project_root": ".", "models": {"ParentModel": {"base_dir": "base_dir_A", "plot_file": "plot_A.py", "adapters": {"ad_A": {"base_dir": "adapters/ad_A", "config_file": "conf.py"}}}, "ChildModel": {"parent": "ParentModel", "base_dir": "base_dir_B", "components": {"sub": "MemberModel"}}, "MemberModel": {"base_dir": "base_dir_B", "plot_file": "plot_B.py"}}}

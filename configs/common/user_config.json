@@ -1,8 +1,8 @@
 {
     "_name": "common",
-    "max_epochs": 10,
+    "max_epochs": 1,
     "batch_size": 32,
-    "seed": 42,
+    "seed": 11,
     "num_workers": 2,
     "gpus": 1
 }
