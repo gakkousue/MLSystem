@@ -42,7 +42,34 @@ def main():
         # 2. 実験環境の復元
         print(f">> Loading Experiment: {hash_id}")
         loader = ExperimentLoader(hash_id)
-        
+
+        # 3. 実行時パラメータのオーバーライド抽出 (args から +開頭のものを取得)
+        from omegaconf import OmegaConf
+
+        overrides = {}
+        dot_list = [a[1:] for a in job_args if a.startswith("+")]
+        if dot_list:
+            try:
+                # Hydra形式のドット記法を辞書に変換
+                raw_overrides = OmegaConf.to_container(
+                    OmegaConf.from_dotlist(dot_list), resolve=True
+                )
+                # loaderが期待する xxx_diff 形式に変換
+                mapping = {
+                    "common": "common_diff",
+                    "model_params": "model_diff",
+                    "adapter_params": "adapter_diff",
+                    "data_params": "data_diff",
+                }
+                for k, v in raw_overrides.items():
+                    if k in mapping:
+                        overrides[mapping[k]] = v
+            except Exception as e:
+                print(f"[Warning] Failed to parse overrides from args: {e}")
+
+        # オーバーライドを登録 (Plotクラス内でのsetup呼び出しにも適用されるようにする)
+        loader.update_overrides(overrides)
+
         # モデル構築（必須）
         loader.setup()
 

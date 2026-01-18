@@ -1,0 +1,6 @@
+{
+    "_name": "baseline_mlp",
+    "n_units": 100,
+    "lr": 0.01,
+    "step_size": 200
+}

@@ -33,12 +33,16 @@ class ExperimentLoader:
         self.dataset_name = self.diff_payload["dataset"]
 
         self.registry = Registry()
+        self.overrides = {}
+
+    def update_overrides(self, overrides):
+        """外部からランタイムオーバーライド（修正用パラメータなど）を設定する"""
+        if overrides:
+            self.overrides.update(overrides)
 
     def _restore_params(self, config_cls, diff):
         """Configクラスのデフォルト値にDiffを適用してパラメータを復元"""
         # Configクラスそのものを受け取るように変更
-        if not config_cls:
-            return diff or {}
         if not config_cls:
             # 見つからない場合はdiffをそのまま返す（フォールバック）
             return diff or {}
@@ -53,8 +57,11 @@ class ExperimentLoader:
         # 辞書に戻して返す
         return OmegaConf.to_container(conf, resolve=True)
 
-    def load_modules(self):
+    def load_modules(self, overrides=None):
         """定義モジュールとパラメータをロードして返す（インスタンス化はしない）"""
+        if overrides is None:
+            overrides = self.overrides
+        # overrides: {"model_diff": {...}, "data_diff": {...}, ...}
         try:
             # クラス/モジュール読み込み (Registry)
             ModelClass = self.registry.get_main_class("models", self.model_name)
@@ -72,16 +79,19 @@ class ExperimentLoader:
             )
             data_cls = self.registry.get_config_class("datasets", self.dataset_name)
 
+            # 差分取得（オーバーライド適用）
+            def get_diff(key):
+                diff = self.diff_payload.get(key, {}).copy()
+                if overrides and key in overrides:
+                    diff.update(overrides[key])
+                return diff
+
             # パラメータ復元
-            model_params = self._restore_params(
-                model_cls, self.diff_payload.get("model_diff", {})
-            )
+            model_params = self._restore_params(model_cls, get_diff("model_diff"))
             adapter_params = self._restore_params(
-                adapter_cls, self.diff_payload.get("adapter_diff", {})
+                adapter_cls, get_diff("adapter_diff")
             )
-            data_params = self._restore_params(
-                data_cls, self.diff_payload.get("data_diff", {})
-            )
+            data_params = self._restore_params(data_cls, get_diff("data_diff"))
 
             return {
                 "ModelClass": ModelClass,
@@ -94,12 +104,14 @@ class ExperimentLoader:
         except ImportError as e:
             raise ImportError(f"Failed to load definition modules: {e}")
 
-    def setup(self, stage="test"):
+    def setup(self, stage="test", overrides=None):
         """
         DataModuleとModelを初期化し、Checkpointがあればロードした状態で返す。
         return: (model, datamodule)
         """
-        modules = self.load_modules()
+        if overrides is None:
+            overrides = self.overrides
+        modules = self.load_modules(overrides=overrides)
 
         # 1. AdapterからTransform取得
         input_transform = modules["adapter_mod"].get_input_transform(
@@ -109,9 +121,13 @@ class ExperimentLoader:
         # 2. DataModule作成
         # diff_payloadから共通設定も復元する
         common_conf_mod = EnvManager().get_common_config_module()
-        common_params = self._restore_params(
-            common_conf_mod, self.diff_payload.get("common_diff", {})
-        )
+        common_config_cls = find_config_class(common_conf_mod)
+
+        common_diff = self.diff_payload.get("common_diff", {}).copy()
+        if overrides and "common_diff" in overrides:
+            common_diff.update(overrides["common_diff"])
+
+        common_params = self._restore_params(common_config_cls, common_diff)
 
         # パラメータ結合ロジックを execute_train.py と統一 (Common < Dataset < Adapter < Model)
         all_params = {}
@@ -141,6 +157,9 @@ class ExperimentLoader:
         # Modelクラスを使用
         ModelClass = modules["ModelClass"]
         model = ModelClass(**final_model_kwargs)
+
+        self.model = model
+        self.datamodule = datamodule
 
         return model, datamodule
 

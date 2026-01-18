@@ -16,11 +16,7 @@ class RCNPDataset(Dataset):
     # transform引数を追加して保存する
     def __init__(self, data_dict, indices, transform=None):
         """
-        data_dict: キャッシュからロードされた全データの辞書
-          - 'axis': (N, 3) numpy array
-          - 'part': (N, MaxPart, 7) numpy array (padded)
-          - 'num': (N,) numpy array
-          - 'label': (N,) numpy array
+        data_dict: 全データの辞書
         indices: このデータセットで使用するインデックスのリスト
         """
         self.axis = torch.from_numpy(data_dict["axis"][indices])
@@ -55,7 +51,6 @@ class DataModule(pl.LightningDataModule):
         self.adapter_transform = adapter_transform
 
         self.data_dir = self.conf["data_dir"]
-        self.cache_dir = os.path.join(self.data_dir, "cache")
         self.max_particles = self.conf.get("max_particles", 100)
 
         # クラス定義 (bb=0, cc=1, uds=2)
@@ -92,181 +87,157 @@ class DataModule(pl.LightningDataModule):
         return padded
 
     def prepare_data(self):
-        """H5ファイルを読み込み、結合・整形してキャッシュを作成"""
+        """ディレクトリの存在確認のみ"""
         if not os.path.exists(self.data_dir):
             raise FileNotFoundError(f"Data directory not found: {self.data_dir}")
 
-        os.makedirs(self.cache_dir, exist_ok=True)
-        cache_path = os.path.join(
-            self.cache_dir, f"data_cache_len{self.max_particles}.pkl"
-        )
-
-        if os.path.exists(cache_path):
-            return
-
+    def _load_raw_data(self):
+        """H5ファイルを読み込み、指定された固定イベント数でデータを整形して返す"""
         print(f">> Scanning H5 files in {self.data_dir} ...")
 
-        # ファイルパターンの定義
-        # ファイル名例: bb.eL.pR_50000.h5
-        # ラベルマッピング: bb->0, cc->1, uu/dd/ss->2
+        # 固定のイベント数を定義
+        load_counts = {
+            "bb": 60000, "cc": 60000, "uu": 40000, "dd": 10000, "ss": 10000,
+        }
         label_map = {"bb": 0, "cc": 1, "uu": 2, "dd": 2, "ss": 2}
+        tags = list(load_counts.keys())
+        
+        # 1ファイルあたりの想定イベント数
+        EVENTS_PER_FILE = 50000
 
-        files = glob.glob(os.path.join(self.data_dir, "*.h5"))
-        if not files:
+        # ファイルを分類して収集: map[tag][pol] = [files...]
+        files_map = {tag: {"eL": [], "eR": []} for tag in tags}
+        
+        all_files = glob.glob(os.path.join(self.data_dir, "*.h5"))
+        if not all_files:
             raise RuntimeError(f"No .h5 files found in {self.data_dir}")
 
+        for fpath in all_files:
+            fname = os.path.basename(fpath)
+            # フレーバー判定 (先頭2文字)
+            m_tag = re.match(r"^([a-z]{2})", fname)
+            if not m_tag or m_tag.group(1) not in tags:
+                continue
+            tag = m_tag.group(1)
+
+            # 偏極判定 (ファイル名に eL または eR が含まれると仮定)
+            if "eL" in fname:
+                pol = "eL"
+            elif "eR" in fname:
+                pol = "eR"
+            else:
+                continue # 偏極が特定できないファイルはスキップ
+
+            files_map[tag][pol].append(fpath)
+
+        # 必要なイベント数を供給できるかチェック
+        print(">> Checking file availability for fixed event counts:")
+        for tag, total_needed in load_counts.items():
+            for pol in ["eL", "eR"]:
+                half_needed = total_needed // 2
+                available_files = len(files_map[tag][pol])
+                available_events = available_files * EVENTS_PER_FILE
+                print(f"  [{tag}][{pol}] Needed: {half_needed}, Available: {available_events} ({available_files} files)")
+                if available_events < half_needed:
+                    raise RuntimeError(f"Insufficient data for [{tag}][{pol}]. Needed {half_needed} events, but only {available_events} available.")
+
+        # データのロード
         all_axis = []
-        all_part_lists = []  # パディング前の一時リスト
+        all_part_lists = []
         all_nums = []
         all_labels = []
 
-        # 特徴量カラム定義
-        # TTreeの変数名に基づく
         cols_axis = ["jet_px", "jet_py", "jet_pz"]
-        cols_part = [
-            "pfcand_px",
-            "pfcand_py",
-            "pfcand_pz",
-            "pfcand_e",
-            "pfcand_charge",
-            "pfcand_dxy",
-            "pfcand_dz",
+        # 荷電粒子と中性粒子の特徴量カラムを定義
+        cols_part_charged = [
+            "pfcand_px", "pfcand_py", "pfcand_pz", "pfcand_e",
+            "pfcand_charge", "pfcand_dxy", "pfcand_dz",
+        ]
+        cols_part_neutral = [
+            "neu_pfcand_px", "neu_pfcand_py", "neu_pfcand_pz", "neu_pfcand_e",
+            "neu_pfcand_charge", "neu_pfcand_dxy", "neu_pfcand_dz",
         ]
 
-        for fpath in files:
-            fname = os.path.basename(fpath)
-
-            # ラベルの特定
-            # 先頭のドットまでを取得 (bb, cc, uu...)
-            m = re.match(r"^([a-z]{2})", fname)
-            if not m:
-                print(f"Skipping unknown file format: {fname}")
-                continue
-
-            tag = m.group(1)
-            if tag not in label_map:
-                print(f"Skipping unknown tag '{tag}': {fname}")
-                continue
-
+        for tag, total_needed in load_counts.items():
             label = label_map[tag]
-            print(f"Processing {fname} (Label: {tag}->{label})")
+            # eL, eR から半分ずつ読み込む
+            half_needed = total_needed // 2
+            
+            for pol in ["eL", "eR"]:
+                needed = half_needed
+                # ファイルリストをソートして順に読み込む
+                file_list = sorted(files_map[tag][pol])
+                
+                for fpath in file_list:
+                    if needed <= 0:
+                        break
+                    
+                    fname = os.path.basename(fpath)
+                    try:
+                        with h5py.File(fpath, "r") as f:
+                            grp = f["ntp"]
+                            
+                            # Axis
+                            axis_cols_data = [grp[c][:] for c in cols_axis]
+                            file_axis = np.stack(axis_cols_data, axis=1).astype(np.float32)
+                            n_events_in_file = len(file_axis)
 
-            # h5pyで読み込み
-            try:
-                with h5py.File(fpath, "r") as f:
-                    if "ntp" not in f:
-                        print(
-                            f"Group 'ntp' not found in {fname}. Keys: {list(f.keys())}"
-                        )
-                        continue
+                            # 今回このファイルから取得する数
+                            take_n = min(needed, n_events_in_file)
+                            
+                            # データをスライスして取得
+                            sliced_axis = file_axis[:take_n]
+                            all_axis.append(sliced_axis)
+                            
+                            all_labels.append(np.full(take_n, label, dtype=np.int64))
 
-                    grp = f["ntp"]
+                            # Particles (荷電粒子と中性粒子を結合)
+                            charged_part_dict = {c: grp[c][:take_n] for c in cols_part_charged}
+                            neutral_part_dict = {c: grp[c][:take_n] for c in cols_part_neutral}
 
-                    # --- Axis Features ---
-                    # 各カラムを読み込んで結合 (N, 3)
-                    # jet_px, jet_py, jet_pz はそれぞれ (N,) の配列想定
-                    axis_cols_data = []
-                    for c in cols_axis:
-                        if c in grp:
-                            axis_cols_data.append(grp[c][:])
-                        else:
-                            raise KeyError(f"Column '{c}' not found in {fname}")
+                            for i in range(take_n):
+                                # 荷電粒子の特徴量を取得
+                                feats_charged = [charged_part_dict[c][i] for c in cols_part_charged]
+                                if len(feats_charged) > 0 and len(feats_charged[0]) > 0:
+                                    stacked_charged = np.stack(feats_charged, axis=1).astype(np.float32)
+                                else:
+                                    stacked_charged = np.zeros((0, 7), dtype=np.float32)
 
-                    # スタックして (N, 3) に変換
-                    axis_data = np.stack(axis_cols_data, axis=1).astype(np.float32)
-                    all_axis.append(axis_data)
+                                # 中性粒子の特徴量を取得
+                                feats_neutral = [neutral_part_dict[c][i] for c in cols_part_neutral]
+                                if len(feats_neutral) > 0 and len(feats_neutral[0]) > 0:
+                                    stacked_neutral = np.stack(feats_neutral, axis=1).astype(np.float32)
+                                else:
+                                    stacked_neutral = np.zeros((0, 7), dtype=np.float32)
 
-                    # --- Labels ---
-                    n_events = len(axis_data)
-                    labels = np.full(n_events, label, dtype=np.int64)
-                    all_labels.append(labels)
+                                # 荷電粒子と中性粒子を結合
+                                stacked = np.vstack([stacked_charged, stacked_neutral])
 
-                    # --- Particle Features ---
-                    # pfcand_* は VLEN (Variable Length) データセットとして保存されている想定
-                    # h5pyで読むと、各要素が numpy array であるような numpy object array になる (N,)
-                    part_dict = {}
-                    for c in cols_part:
-                        if c in grp:
-                            part_dict[c] = grp[c][:]
-                        else:
-                            raise KeyError(f"Column '{c}' not found in {fname}")
+                                all_part_lists.append(stacked)
+                                all_nums.append(len(stacked))
+                            
+                            needed -= take_n
 
-                    # メモリ上の辞書データを使って後続処理へ
-                    # part_dict[c] は (N,) の numpy array (object)
+                    except Exception as e:
+                        print(f"Error reading {fname}: {e}")
 
-                    current_part_list = []
-                    current_nums = []
-
-                    for i in range(n_events):
-                        # 各特徴量の配列を取得
-                        feats = [part_dict[c][i] for c in cols_part]
-
-                        # 転置して (N_part, 7) にする
-                        if len(feats[0]) == 0:
-                            stacked = np.zeros((0, 7), dtype=np.float32)
-                        else:
-                            stacked = np.stack(feats, axis=1).astype(np.float32)
-
-                        current_part_list.append(stacked)
-                        current_nums.append(len(stacked))
-
-                    all_part_lists.extend(current_part_list)
-                    all_nums.extend(current_nums)
-
-            except Exception as e:
-                print(f"Failed to read {fname}: {e}")
-                continue
-                # 各特徴量の配列を取得
-                # 例: px = [0.1, 0.2], py = [0.3, 0.4] ...
-                feats = [part_dict[c][i] for c in cols_part]
-
-                # 転置して (N_part, 7) にする
-                # np.stack(feats, axis=1)
-                # ただし要素数が0の場合がある
-                if len(feats[0]) == 0:
-                    stacked = np.zeros((0, 7), dtype=np.float32)
-                else:
-                    stacked = np.stack(feats, axis=1).astype(np.float32)
-
-                current_part_list.append(stacked)
-                current_nums.append(len(stacked))
-
-            all_part_lists.extend(current_part_list)
-            all_nums.extend(current_nums)
-
-        # 結合
         if not all_axis:
             raise RuntimeError("No valid data loaded.")
 
         full_axis = np.concatenate(all_axis, axis=0)
         full_labels = np.concatenate(all_labels, axis=0)
         full_nums = np.array(all_nums, dtype=np.float32)
-
-        print(f">> Padding particle features (Max={self.max_particles})...")
         full_part = self._pad_particles(all_part_lists)
 
-        # 保存
-        data_dict = {
+        return {
             "axis": full_axis,
             "part": full_part,
             "num": full_nums,
             "label": full_labels,
         }
 
-        with open(cache_path, "wb") as f:
-            pickle.dump(data_dict, f)
-
-        print(f">> Cache saved to {cache_path} (Total events: {len(full_labels)})")
-
     def setup(self, stage=None):
-        cache_path = os.path.join(
-            self.cache_dir, f"data_cache_len{self.max_particles}.pkl"
-        )
-        if not os.path.exists(cache_path):
-            raise RuntimeError("Cache not found. Run prepare_data first.")
-
-        with open(cache_path, "rb") as f:
-            data_dict = pickle.load(f)
+        data_dict = self._load_raw_data()
 
         total_len = len(data_dict["label"])
         indices = list(range(total_len))

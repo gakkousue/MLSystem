@@ -2,7 +2,7 @@
     "_name": "common",
     "max_epochs": 1,
     "batch_size": 32,
-    "seed": 11,
+    "seed": 42,
     "num_workers": 2,
     "gpus": 1
 }
