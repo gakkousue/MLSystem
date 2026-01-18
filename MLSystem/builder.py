@@ -19,6 +19,7 @@ class ExperimentContext:
 
     hash_id: str
     diff_payload: Dict[str, Any]
+    full_config: Dict[str, Any]  # 追加
     model: pl.LightningModule
     datamodule: pl.LightningDataModule
     all_params: Dict[str, Any]
@@ -83,9 +84,13 @@ class ExperimentBuilder:
 
         model = modules["ModelClass"](**final_model_kwargs)
 
+        # 全設定を辞書として取得
+        full_config = OmegaConf.to_container(self.config, resolve=True)
+
         return ExperimentContext(
             hash_id=hash_id,
             diff_payload=diff_payload,
+            full_config=full_config,
             model=model,
             datamodule=datamodule,
             all_params=all_params,
@@ -179,3 +184,13 @@ class ExperimentBuilder:
         all_params.update(user_params["adapter"])
         all_params.update(user_params["model"])
         return all_params
+
+    def get_hash_only(self):
+        """
+        モデルのインスタンス化を行わず、ハッシュ計算と差分抽出のみを行う軽量メソッド。
+        GUIやCLIでのプレビュー用。
+        """
+        modules = self._load_definitions()
+        user_params = self._extract_user_params()
+        hash_id, diff_payload = self._compute_hash(modules, user_params)
+        return hash_id, diff_payload

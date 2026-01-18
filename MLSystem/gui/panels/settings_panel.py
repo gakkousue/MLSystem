@@ -10,8 +10,9 @@ from dataclasses import fields, is_dataclass
 # 環境変数を設定し、sys.pathに必要なパスを追加
 
 
-from MLsystem.hashing import compute_combined_hash
-from MLsystem.submit import add_job, ensure_runner_running
+# from MLsystem.hashing import compute_combined_hash  # 削除
+from MLsystem.submit import add_job, ensure_runner_running, calculate_hash # 追加
+from MLsystem.utils.hydra_helper import dict_to_hydra_args # 追加
 from MLsystem.inspector import get_available_plots
 from MLsystem.registry import Registry
 from MLsystem.utils.env_manager import EnvManager
@@ -441,6 +442,7 @@ class SettingsPanel(ttk.Frame):
         return params
 
     def recalc_hash(self):
+        # GUIの入力値から一時的な設定辞書を作成
         try:
             c_p = self.get_params(self.common_vars)
             m_p = self.get_params(self.model_vars)
@@ -451,30 +453,35 @@ class SettingsPanel(ttk.Frame):
             a_n = self.cb_adapter.get()
             d_n = self.cb_dataset.get()
 
-            m_p["_name"] = m_n
-            a_p["_name"] = a_n
-            d_p["_name"] = d_n
-
-            # スキーマ辞書からクラスオブジェクトを取り出す
-            # load_schemaで "__class_obj__" に埋め込んでいる
-            c_s = self.common_schema
-            m_s = self.load_schema("models", m_n)
-            a_s = self.load_schema("models", m_n, "adapters", a_n)
-            d_s = self.load_schema("datasets", d_n)
-
-            c_cls = c_s.get("__class_obj__")
-            m_cls = m_s.get("__class_obj__")
-            a_cls = a_s.get("__class_obj__")
-            d_cls = d_s.get("__class_obj__")
-
-            hid, payload = compute_combined_hash(
-                c_cls, c_p, m_cls, m_p, a_cls, a_p, d_cls, d_p
-            )
+            # 設定辞書を構築
+            config = {
+                "model": m_n,
+                "adapter": a_n,
+                "dataset": d_n,
+                "common": c_p,
+                "model_params": m_p,
+                "adapter_params": a_p,
+                "data_params": d_p
+            }
+            
+            # Hydra引数に変換
+            hydra_args = dict_to_hydra_args(config)
+            
+            # submit.py のロジックを使ってハッシュ計算
+            # ※注意: これは重い処理になる可能性がある
+            hid = calculate_hash(hydra_args)
+            
             self.current_hash.set(hid)
-            self.last_hash_payload = payload
-        except:
+            # last_hash_payload は不要になったが、互換性のため保持するなら空でもよい
+            # または Config保存ロジックを別途考える必要があるが、
+            # submit.py 経由で行う場合、config_diff.json の生成責務も submit/runner 側に移る。
+            # GUI側での config_diff.json 保存ロジック (submit_job内) も見直す必要があるが、
+            # とりあえずハッシュ表示はこれで完了。
+            self.last_config_dict = config # 後の保存用にとっておく
+
+        except Exception as e:
+            print(f"Hash calculation error: {e}")
             self.current_hash.set("Error")
-            self.last_hash_payload = None
 
     def save_user_config(self, kind, name, var_dict, sub_kind=None, sub_name=None):
         if kind == "common":
@@ -499,7 +506,7 @@ class SettingsPanel(ttk.Frame):
 
     def submit_job(self):
         hid = self.current_hash.get()
-        if hid == "Error" or not self.last_hash_payload:
+        if hid == "Error":
             return
 
         mode = self.task_mode.get()
@@ -511,37 +518,31 @@ class SettingsPanel(ttk.Frame):
         self.save_user_config("models", m_n, self.model_vars)
         self.save_user_config("models", m_n, self.adapter_vars, "adapters", a_n)
         self.save_user_config("datasets", d_n, self.data_vars)
+        
+        # hydra_args の生成は recalc_hash と同じロジックが必要
+        # ここでは dict_to_hydra_args を使う
+        config = {
+            "model": m_n,
+            "adapter": a_n,
+            "dataset": d_n,
+            "common": self.get_params(self.common_vars),
+            "model_params": self.get_params(self.model_vars),
+            "adapter_params": self.get_params(self.adapter_vars),
+            "data_params": self.get_params(self.data_vars)
+        }
+        hydra_args = dict_to_hydra_args(config)
 
-        hydra_args = [f"model={m_n}", f"adapter={a_n}", f"dataset={d_n}"]
-
-        c_p = self.get_params(self.common_vars)
-        m_p = self.get_params(self.model_vars)
-        a_p = self.get_params(self.adapter_vars)
-        d_p = self.get_params(self.data_vars)
-
-        for k, v in c_p.items():
-            hydra_args.append(f"+common.{k}={v}")
-        for k, v in m_p.items():
-            hydra_args.append(f"+model_params.{k}={v}")
-        for k, v in a_p.items():
-            hydra_args.append(f"+adapter_params.{k}={v}")
-        for k, v in d_p.items():
-            hydra_args.append(f"+data_params.{k}={v}")
-
-        exp_dir = os.path.join(EnvManager().output_dir, "experiments", hid)
-        os.makedirs(exp_dir, exist_ok=True)
-        config_path = os.path.join(exp_dir, "config_diff.json")
-
-        if not os.path.exists(config_path):
-            try:
-                with open(config_path, "w") as f:
-                    json.dump(self.last_hash_payload, f, indent=4)
-            except Exception as e:
-                messagebox.showerror("Error", f"Failed to save config: {e}")
-                return
+        # config_diff.json の保存責務について:
+        # 以前はここでGUIが保存していたが、Runner/ExecuteTrainが保存するようになったため
+        # ここでの保存は不要...と言いたいが、
+        # "実験フォルダを作って設定を置く" のはジョブ実行前に行いたい場合もある(プレースホルダ)。
+        # しかし execute_train.py が config_diff.json を上書き保存するので、
+        # ここでは保存処理を削除し、完全にバックエンドに任せるのが安全。
+        # (Runnerが動くまでフォルダが作られない可能性があるが、add_jobがQueueファイルを作るのでOK)
 
         if mode == "train":
-            add_job(hydra_args, task_type="train", hash_id=hid)
+            # hash_id は None を渡す (submit.py で計算)
+            add_job(hydra_args, task_type="train", hash_id=None)
         else:
             display_label = self.selected_plot_class.get()
             if not display_label:
@@ -558,7 +559,7 @@ class SettingsPanel(ttk.Frame):
             real_class_name = plot_info["class"]
             target_member = plot_info["target"]
 
-            add_job(hydra_args, task_type="plot", hash_id=hid, target_class=real_class_name, target_member=target_member)
+            add_job(hydra_args, task_type="plot", hash_id=None, target_class=real_class_name, target_member=target_member)
 
         # アプリ全体に更新を通知
         self.app.on_job_submitted()

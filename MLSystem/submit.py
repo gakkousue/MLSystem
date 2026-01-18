@@ -9,6 +9,24 @@ import signal
 
 from MLsystem.queue_manager import QueueManager
 from MLsystem.utils.env_manager import EnvManager
+from MLsystem.utils.hydra_helper import get_config_from_args
+from MLsystem.builder import ExperimentBuilder
+
+
+def calculate_hash(args):
+    """
+    Hydra引数リストからハッシュIDを計算して返す。
+    """
+    try:
+        # Hydra設定を構成
+        cfg = get_config_from_args(args)
+        # Builderを使ってハッシュのみ計算
+        builder = ExperimentBuilder(cfg)
+        hash_id, _ = builder.get_hash_only()
+        return hash_id
+    except Exception as e:
+        print(f"[Warning] Failed to calculate hash: {e}")
+        return "unknown_hash"
 
 
 # 外部から呼び出し可能な関数にする
@@ -18,10 +36,16 @@ def add_job(args, task_type="train", hash_id=None, target_class=None, target_mem
 
     args: Hydra引数リスト (train.pyに渡すもの)
     task_type: "train" または "plot"
-    hash_id: 実験設定のハッシュID (required)
+    hash_id: 実験設定のハッシュID (Optional)。Noneの場合はargsから自動計算する。
     target_class: Plotタスクの場合の対象クラス名 (optional)
     target_member: Plotタスクの対象メンバ (NoneならMainモデル)
     """
+    # ハッシュIDが指定されていなければ計算する
+    if hash_id is None:
+        print(">> Calculating Hash ID from arguments...")
+        hash_id = calculate_hash(args)
+        print(f">> Calculated Hash ID: {hash_id}")
+
     queue_root = EnvManager().queue_dir
     pending_dir = os.path.join(queue_root, "pending")
     os.makedirs(pending_dir, exist_ok=True)

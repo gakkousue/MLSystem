@@ -39,8 +39,13 @@ def main(config):
     os.makedirs(save_dir, exist_ok=True)
 
     # 2. 設定の保存
+    # (A) 差分設定
     with open(os.path.join(save_dir, "config_diff.json"), "w") as f:
         json.dump(context.diff_payload, f, indent=4)
+
+    # (B) 完全設定 (config.json)
+    with open(os.path.join(save_dir, "config.json"), "w") as f:
+        json.dump(context.full_config, f, indent=4)
 
     # 3. ロガーとチェックポイント管理
     logger = pl.loggers.TensorBoardLogger(
