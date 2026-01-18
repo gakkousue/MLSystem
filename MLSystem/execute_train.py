@@ -18,7 +18,8 @@ from MLsystem.checkpoint_manager import CheckpointManager
 from MLsystem.callbacks import JobLoggingCallback  # 追加
 
 
-@hydra.main(config_path="../configs", config_name="config", version_base=None)
+# config.yamlをMLSystemパッケージ内に配置したため、config_pathを変更
+@hydra.main(config_path="./configs", config_name="config", version_base=None)
 def main(config):
     print(
         f"Loaded Config: Model={config.model}, Adapter={config.adapter}, Dataset={config.dataset}"
@@ -33,7 +34,8 @@ def main(config):
         print(f"Error building experiment: {e}")
         return
 
-    save_dir = os.path.join(EnvManager().output_dir, "experiments", context.hash_id)
+    # output/hashid/{hash_id} に保存する
+    save_dir = os.path.join(EnvManager().output_dir, "hashid", context.hash_id)
     print(f"Experiment Hash ID: {context.hash_id}")
 
     os.makedirs(save_dir, exist_ok=True)
@@ -53,6 +55,26 @@ def main(config):
     )
 
     checkpoint_manager = CheckpointManager(save_dir)
+
+    # --- Hydraの出力ディレクトリとの連携 ---
+    # Hydraが作成した日時ディレクトリを取得
+    from hydra.core.hydra_config import HydraConfig
+    if HydraConfig.instance().cfg is not None:
+        hydra_output_dir = HydraConfig.get().runtime.output_dir
+        
+        # Hydraディレクトリ内に、実験ハッシュフォルダへのシンボリックリンク(ショートカット)を作成
+        # これにより "outputs/日付/時間/Link_to_Experiment" -> "experiments/{hash_id}" と飛べるようになる
+        try:
+            link_name = os.path.join(hydra_output_dir, f"Link_to_{context.hash_id}")
+            # Windowsの場合は管理者権限が必要な場合があるため、ジャンクションやショートカット等の配慮が必要だが
+            # Python 3.8+ の os.symlink は開発者モードならWindowsでも動作する。
+            # 安全のため、相対パスでリンクを作成
+            target_rel = os.path.relpath(save_dir, hydra_output_dir)
+            if not os.path.exists(link_name):
+                os.symlink(target_rel, link_name, target_is_directory=True)
+                print(f">> Created symlink: {link_name} -> {save_dir}")
+        except Exception as e:
+            print(f"[Warning] Failed to create symlink in Hydra dir: {e}")
 
     # 再開用チェックポイントの取得
     checkpoint_path = checkpoint_manager.get_resume_path()

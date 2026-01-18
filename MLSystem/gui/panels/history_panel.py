@@ -46,7 +46,8 @@ class HistoryPanel(ttk.Frame):
         self.after(5000, self.start_auto_refresh)
 
     def load_history(self):
-        root = os.path.join(EnvManager().output_dir, "experiments")
+        # output/hashid/ ディレクトリを探索
+        root = os.path.join(EnvManager().output_dir, "hashid")
         if not os.path.exists(root):
             return
 

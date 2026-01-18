@@ -50,15 +50,14 @@ def get_config_from_args(args: List[str], config_path: str = "../configs", confi
         # env_config等を使うのがベストだが、ここでは引数のデフォルト値または相対パスを使用
         
         # hydra.initialize は呼び出し元スクリプトからの相対パスを期待する
-        # ここでは絶対パス変換して指定するアプローチをとる
-        # config_path が "../configs" の場合、このファイル(hydra_helper.py)からの相対として解決を試みる
+        # config_path はこのファイル(hydra_helper.py)からの相対パスで、
+        # MLSystemパッケージ内のconfigsディレクトリを指定する
+        # __file__ はこのファイルのパス, ".." でutilsの一つ上(MLSystem)へ, "configs" で目的のディレクトリへ
+        rel_config_path = os.path.join(os.path.dirname(__file__), "..", "configs")
         
-        abs_config_path = os.path.abspath(os.path.join(os.path.dirname(__file__), config_path))
-        
-        # RelPath計算 (hydra.initializeのversion_base=None指定で絶対パスも通る場合があるが、
-        # 公式推奨は相対パス。しかしディレクトリ構造が変わると壊れる。
-        # ここでは initialize_config_dir を使用して絶対パスを指定する)
         from hydra import initialize_config_dir
+        # initialize_config_dirには絶対パスを指定するのが最も安全
+        abs_config_path = os.path.abspath(rel_config_path)
         initialize_config_dir(config_dir=abs_config_path, version_base=None)
 
     # overridesの作成

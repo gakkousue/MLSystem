@@ -1,0 +1,15 @@
+# MLSystemパッケージのデフォルト設定
+# (ユーザーは通常これを直接編集しない)
+
+# プレースホルダーのみ定義
+model: ???
+adapter: ???
+dataset: ???
+
+model_params: {}
+adapter_params: {}
+data_params: {}
+
+hydra:
+  run:
+    dir: output/time/${now:%Y-%m-%d}/${now:%H-%M-%S}

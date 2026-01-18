@@ -19,7 +19,8 @@ class ExperimentLoader:
 
     def __init__(self, hash_id):
         self.hash_id = hash_id
-        self.exp_dir = os.path.join(EnvManager().output_dir, "experiments", hash_id)
+        # 実験データは output/hashid/{hash_id} にあるためパスを修正
+        self.exp_dir = os.path.join(EnvManager().output_dir, "hashid", hash_id)
         self.config_path = os.path.join(self.exp_dir, "config_diff.json")
 
         if not os.path.exists(self.config_path):
