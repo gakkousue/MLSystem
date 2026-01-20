@@ -1,0 +1,7 @@
+# definitions/models/resnet/default.yaml
+_target_: definitions.models.resnet.model.Model
+# Default parameters
+in_channels: 3
+num_classes: 1000
+lr: 0.001
+pretrained: false

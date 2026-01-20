@@ -1,15 +1,21 @@
-# MLSystemパッケージのデフォルト設定
-# (ユーザーは通常これを直接編集しない)
+# MLSystem/configs/config.yaml
+defaults:
+  - _self_
+  - dataset: mnist
+  - model: resnet
 
-# プレースホルダーのみ定義
-model: ???
-adapter: ???
-dataset: ???
+# 実験名（保存ディレクトリに使用）
+exp_name: "default_experiment"
 
-model_params: {}
-adapter_params: {}
-data_params: {}
+# 再開または参照する過去の実験ディレクトリ（絶対パス推奨）
+# 例: c:/Users/soush/研究室/MLSystem/outputs/2026-01-21/10-00-00
+source_run_dir: null
 
+# Hydra設定
 hydra:
   run:
-    dir: output/time/${now:%Y-%m-%d}/${now:%H-%M-%S}
+    # 出力ディレクトリ構造: outputs/日付/時間
+    dir: ../outputs/${now:%Y-%m-%d}/${now:%H-%M-%S}
+  sweep:
+    dir: ../outputs/${now:%Y-%m-%d}/${now:%H-%M-%S}
+    subdir: ${hydra.job.num}

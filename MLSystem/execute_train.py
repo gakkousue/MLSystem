@@ -1,123 +1,72 @@
-# system/execute_train.py
+# MLSystem/execute_train.py
 import os
 import sys
-import json
-import importlib
-import torch  # 追加
 import hydra
-from omegaconf import OmegaConf
+from omegaconf import DictConfig, OmegaConf
 import pytorch_lightning as pl
 from pytorch_lightning.callbacks import ModelCheckpoint
 
-from MLsystem.hashing import compute_combined_hash
-from MLsystem.utils.env_manager import EnvManager
-from MLsystem.registry import Registry
-from MLsystem.inspector import find_config_class  # common設定用に残す
-from MLsystem.builder import ExperimentBuilder
-from MLsystem.checkpoint_manager import CheckpointManager
-from MLsystem.callbacks import JobLoggingCallback  # 追加
+import PyPathManager # パス解決 (import時に実行される)
 
+@hydra.main(config_path="configs", config_name="config", version_base=None)
+def main(cfg: DictConfig):
+    print(OmegaConf.to_yaml(cfg))
 
-# config.yamlをMLSystemパッケージ内に配置したため、config_pathを変更
-@hydra.main(config_path="./configs", config_name="config", version_base=None)
-def main(config):
-    print(
-        f"Loaded Config: Model={config.model}, Adapter={config.adapter}, Dataset={config.dataset}"
+    # 1. データの準備 (Hydra Instantiate)
+    print(">> Instantiating DataModule...")
+    datamodule = hydra.utils.instantiate(cfg.dataset)
+    datamodule.prepare_data()
+    datamodule.setup("fit")
+
+    # 2. モデルの準備 (Hydra Instantiate)
+    print(">> Instantiating Model...")
+    model = hydra.utils.instantiate(cfg.model)
+
+    # 3. コールバックの準備
+    callbacks = []
+    
+    # チェックポイント保存
+    # Hydraの出力ディレクトリは hydra.run.dir で指定された場所
+    # デフォルトでは .hydra/ もそこに作られる
+    ckpt_callback = ModelCheckpoint(
+        monitor="val_loss",
+        mode="min",
+        save_top_k=1,
+        filename="{epoch}-{val_loss:.2f}",
+        save_last=True
     )
+    callbacks.append(ckpt_callback)
 
-    # 1. ExperimentBuilderを使用して環境を構築
-    #    (クラスロード, パラメータマージ, ハッシュ計算, インスタンス化)
-    try:
-        builder = ExperimentBuilder(config)
-        context = builder.build()
-    except Exception as e:
-        print(f"Error building experiment: {e}")
-        return
-
-    # output/hashid/{hash_id} に保存する
-    save_dir = os.path.join(EnvManager().output_dir, "hashid", context.hash_id)
-    print(f"Experiment Hash ID: {context.hash_id}")
-
-    os.makedirs(save_dir, exist_ok=True)
-
-    # 2. 設定の保存
-    # (A) 差分設定
-    with open(os.path.join(save_dir, "config_diff.json"), "w") as f:
-        json.dump(context.diff_payload, f, indent=4)
-
-    # (B) 完全設定 (config.json)
-    with open(os.path.join(save_dir, "config.json"), "w") as f:
-        json.dump(context.full_config, f, indent=4)
-
-    # 3. ロガーとチェックポイント管理
-    logger = pl.loggers.TensorBoardLogger(
-        save_dir=save_dir, name="lightning_logs", version=""
-    )
-
-    checkpoint_manager = CheckpointManager(save_dir)
-
-    # --- Hydraの出力ディレクトリとの連携 ---
-    # Hydraが作成した日時ディレクトリを取得
-    from hydra.core.hydra_config import HydraConfig
-    if HydraConfig.instance().cfg is not None:
-        hydra_output_dir = HydraConfig.get().runtime.output_dir
-        
-        # Hydraディレクトリ内に、実験ハッシュフォルダへのシンボリックリンク(ショートカット)を作成
-        # これにより "outputs/日付/時間/Link_to_Experiment" -> "experiments/{hash_id}" と飛べるようになる
-        try:
-            link_name = os.path.join(hydra_output_dir, f"Link_to_{context.hash_id}")
-            # Windowsの場合は管理者権限が必要な場合があるため、ジャンクションやショートカット等の配慮が必要だが
-            # Python 3.8+ の os.symlink は開発者モードならWindowsでも動作する。
-            # 安全のため、相対パスでリンクを作成
-            target_rel = os.path.relpath(save_dir, hydra_output_dir)
-            if not os.path.exists(link_name):
-                os.symlink(target_rel, link_name, target_is_directory=True)
-                print(f">> Created symlink: {link_name} -> {save_dir}")
-        except Exception as e:
-            print(f"[Warning] Failed to create symlink in Hydra dir: {e}")
-
-    # 再開用チェックポイントの取得
-    checkpoint_path = checkpoint_manager.get_resume_path()
-    if checkpoint_path:
-        print(f">> Found checkpoint. Resuming from: {checkpoint_path}")
-
-        # すでに学習完了済みかチェックして、完了していれば正常終了する
-        max_epochs = context.all_params.get("max_epochs")
-        if max_epochs is not None:
-            try:
-                # チェックポイントをCPUにロードしてエポック数を確認
-                checkpoint = torch.load(checkpoint_path, map_location="cpu")
-                saved_epoch = checkpoint.get("epoch", -1)
-
-                # saved_epochは0始まりの完了エポックインデックス (例: epoch=9 は10エポック目完了)
-                # したがって、学習済みエポック数は saved_epoch + 1
-                finished_epochs = saved_epoch + 1
-
-                if finished_epochs >= max_epochs:
-                    print(
-                        f"[DONE] [Skip] Training already reached max_epochs ({max_epochs}). Exiting."
-                    )
-                    sys.exit(0)
-            except Exception as e:
-                print(f"[Warning] Failed to inspect checkpoint: {e}")
-
-    # 4. 学習実行
+    # 4. Trainerの準備
+    # Trainerの設定もHydra化できるが、まずはシンプルにコードで記述
+    # 必要に応じて cfg.trainer を参照するように拡張可能
     trainer = pl.Trainer(
-        default_root_dir=save_dir,
-        logger=logger,
-        max_epochs=context.all_params.get("max_epochs"),
+        max_epochs=cfg.get("max_epochs", 10),
         accelerator="auto",
         devices=1,
-        callbacks=[
-            checkpoint_manager.create_callback(),
-            JobLoggingCallback(),
-        ],  # Managerとログ用Callbackを設定
-        enable_progress_bar=False,
-        detect_anomaly=True,
+        callbacks=callbacks,
+        default_root_dir=os.getcwd(), # Hydraがカレントディレクトリを出力先に変更しているため cwd でOK
+        enable_progress_bar=True,
     )
 
-    # max_epochsに達している場合、Lightningは自動的に学習をスキップして終了する
-    trainer.fit(context.model, context.datamodule, ckpt_path=checkpoint_path)
+    
+    # 6. 学習実行
+    ckpt_path = None
+    if cfg.get("source_run_dir"):
+        # 過去の実験から再開する場合
+        # source_run_dir/checkpoints/last.ckpt を探す
+        potential_ckpt = os.path.join(cfg.source_run_dir, "lightning_logs", "version_0", "checkpoints", "last.ckpt")
+        # または直下の checkpoints/last.ckpt (構成による)
+        if not os.path.exists(potential_ckpt):
+             potential_ckpt = os.path.join(cfg.source_run_dir, "checkpoints", "last.ckpt")
+        
+        if os.path.exists(potential_ckpt):
+            ckpt_path = potential_ckpt
+            print(f">> Resuming from checkpoint: {ckpt_path}")
+        else:
+            print(f"[Warning] Source run dir specified but checkpoint not found: {cfg.source_run_dir}")
+
+    trainer.fit(model, datamodule, ckpt_path=ckpt_path)
 
 
 if __name__ == "__main__":

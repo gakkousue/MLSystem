@@ -1,0 +1,9 @@
+# definitions/datasets/mnist/default.yaml
+_target_: definitions.datasets.mnist.datamodule.DataModule
+loader:
+  _target_: definitions.datasets.mnist.loaders.base.MNISTLoader
+  data_dir: "c:/Users/soush/研究室/MLSystem" # デフォルトパス（必要に応じてオーバーライド）
+batch_size: 32
+num_workers: 0
+val_ratio: 0.2
+seed: 42

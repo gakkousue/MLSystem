@@ -1,35 +1,34 @@
 # definitions/models/resnet/model.py
-import pytorch_lightning as pl
-import torch
-import torch.nn as nn
-from torchvision.models import resnet18
-
-# CONFIG_SCHEMA のインポートを削除
 import os
 import json
-
+import torch
+import torch.nn as nn
+import pytorch_lightning as pl
+from torchvision.models import resnet18
 
 class Model(pl.LightningModule):
-    # Adapter経由で整理された引数 (in_channels, num_classes) を受け取る
-    def __init__(self, in_channels=3, num_classes=1000, **kwargs):
+    def __init__(self, in_channels=3, num_classes=1000, lr=0.001, pretrained=False):
+        """
+        ResNet Model
+        Args:
+            in_channels (int): 入力チャンネル数
+            num_classes (int): クラス数
+            lr (float): 学習率
+            pretrained (bool): ImageNet事前学習済みの重みを使用するか
+        """
         super().__init__()
+        self.save_hyperparameters()
 
-        # Hydra/Loaderから渡された kwargs をそのまま設定として扱う
-        # デフォルト値の補完はConfigオブジェクト(Hydra)側で行われている前提
-        self.conf = kwargs
-
-        # ハイパーパラメータとして保存
-        self.save_hyperparameters(
-            {**self.conf, "in_channels": in_channels, "num_classes": num_classes}
-        )
-
+        self.lr = lr
+        
         # ResNet構築
-        self.net = resnet18(weights=None)  # deprecated warning回避のためNone指定
-        if self.conf["pretrained"]:
-            self.net = resnet18(weights="IMAGENET1K_V1")
+        # weights引数の指定方法はtorchvisionのバージョンによるが、最近はweights="IMAGENET1K_V1"推奨
+        weights = "IMAGENET1K_V1" if pretrained else None
+        self.net = resnet18(weights=weights)
 
         # 入力層の調整
         if in_channels != 3:
+            # ResNetの最初のConv2dは (3, 64, kernel=7, stride=2, padding=3, bias=False)
             self.net.conv1 = nn.Conv2d(
                 in_channels, 64, kernel_size=7, stride=2, padding=3, bias=False
             )
@@ -78,13 +77,13 @@ class Model(pl.LightningModule):
 
         self.validation_step_outputs.clear()
 
-        # --- JSONへの保存処理 ---
-        # trainer.default_root_dir は output/experiments/{hash} を指す
+        # --- JSONへの保存処理 (簡易的な記録) ---
+        # trainer.default_root_dir は Hydraの出力ディレクトリ等を指す
         if self.trainer and self.trainer.default_root_dir:
             save_dir = self.trainer.default_root_dir
             metrics_path = os.path.join(save_dir, "accuracy_metrics.json")
-
-            # 既存データの読み込み
+            
+            # 簡易排他制御なしで読み書き（並列実行時は注意が必要だが、学習プロセスは1つ前提）
             data = {}
             if os.path.exists(metrics_path):
                 try:
@@ -93,13 +92,11 @@ class Model(pl.LightningModule):
                 except:
                     pass
 
-            # 現在のエポックの値を更新 (epochは0始まり)
             current_epoch = self.current_epoch
             data[str(current_epoch)] = avg_acc.item()
 
-            # 書き込み
             with open(metrics_path, "w") as f:
                 json.dump(data, f, indent=4)
 
     def configure_optimizers(self):
-        return torch.optim.Adam(self.parameters(), lr=self.conf["lr"])
+        return torch.optim.Adam(self.parameters(), lr=self.lr)
