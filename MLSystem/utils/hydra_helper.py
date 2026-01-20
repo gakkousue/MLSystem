@@ -44,11 +44,6 @@ def get_config_from_args(args: List[str], config_path: str = "../configs", confi
     """
     # GlobalHydraが初期化されていなければ初期化する
     if not GlobalHydra.instance().is_initialized():
-        # 相対パス解決のため、呼び出し元の位置を考慮
-        # ここではMLSystemパッケージ内から呼ばれる前提で、configsへのパスを指定
-        # args[0]などのスクリプト位置に依存しないよう注意が必要
-        # env_config等を使うのがベストだが、ここでは引数のデフォルト値または相対パスを使用
-        
         # hydra.initialize は呼び出し元スクリプトからの相対パスを期待する
         # config_path はこのファイル(hydra_helper.py)からの相対パスで、
         # MLSystemパッケージ内のconfigsディレクトリを指定する

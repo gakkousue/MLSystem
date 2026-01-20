@@ -19,6 +19,7 @@ class InputDataStatistics(BasePlot):
         # 2. Train, Val, Test 各データセットからTensorを取り出して結合する
         datasets = [datamodule.train_ds, datamodule.val_ds, datamodule.test_ds]
         
+        axis = np.concatenate([ds.axis.numpy() for ds in datasets])
         labels = np.concatenate([ds.label.numpy() for ds in datasets])
         parts = np.concatenate([ds.part.numpy() for ds in datasets])
         nums = np.concatenate([ds.num.numpy() for ds in datasets])
@@ -82,10 +83,16 @@ class InputDataStatistics(BasePlot):
 
             # --- Jet Level ---
             # 粒子ごとに和をとってジェットの物理量を計算
-            jet_px = np.sum(parts_cls[:, :, IDX_PX], axis=1)
-            jet_py = np.sum(parts_cls[:, :, IDX_PY], axis=1)
-            jet_pz = np.sum(parts_cls[:, :, IDX_PZ], axis=1)
+
+            jet_px = axis[:, 0]
+            jet_py = axis[:, 1]
+            jet_pz = axis[:, 2]
             jet_e = np.sum(parts_cls[:, :, IDX_E], axis=1)
+            
+            jet_pt = np.sqrt(jet_px**2 + jet_py**2)
+            jet_p  = np.sqrt(jet_px**2 + jet_py**2 + jet_pz**2)
+
+            
 
             jet_pt = np.sqrt(jet_px**2 + jet_py**2)
             jet_p = np.sqrt(jet_px**2 + jet_py**2 + jet_pz**2)
